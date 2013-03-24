@@ -49,6 +49,7 @@ braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
 parens = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
 
 semiSep = flip sepEndBy1 $ T.semi lessLexer
+commaSep = flip sepBy1 $ T.comma lessLexer
 
 
 ---------------------------------------
@@ -58,7 +59,10 @@ semiSep = flip sepEndBy1 $ T.semi lessLexer
 lessParser = statementParser
 
 statementParser :: Parser [Statement]
-statementParser = semiSep $ try mixinParser <|> fmap VariableS variableParser <|> fmap RuleS ruleParser
+statementParser = many1 $ try mixinParser
+                  <|> fmap VariableS variableParser
+                  <|> fmap IncludeS includeParser
+                  <|> fmap RuleS ruleParser
 
 mixinParser = do
     sel <- selParser
@@ -78,10 +82,11 @@ mixinParser = do
     <?> "Expected rule or mixin"
     where
         bodyParser sel = do
-            (s, r, m, v) <- fmap filterStatements (braces statementParser <?> "Expected statements")
+            (s, r, i, m, v) <- fmap filterStatements (braces statementParser <?> "Expected statements")
             return $ Scope
                 { selector = sel
                 , rules = r
+                , includes = i
                 , subscopes = s
                 , mixins = m
                 , variables = v
@@ -108,7 +113,9 @@ selParser = sepBy1 selCombParser comma <?> "Expected selector"
                       <|> (sel >>= return . TypeSelector)
                       <|> (char '&' >> return ParentRef)
                       <?> "Expected simple selector"
-    sel = many1 (alphaNum <|> oneOf "-_") <?> "Expected selector name"
+    sel = simpleSelectorName
+
+simpleSelectorName = many1 (alphaNum <|> oneOf "-_") <?> "Expected selector name"
 
 paramParser = parens $ many singleParam
     where
@@ -117,9 +124,20 @@ paramParser = parens $ many singleParam
             whiteSpace
             deflt <- optionMaybe (char ':' >> whiteSpace >> expressionParser)
             char ';'
-            return $ Param id deflt
+            return $ case deflt of
+                Nothing -> Param id
+                Just val -> DefaultParam id val
 
 guardParser = parens $ boolExpressionParser
+
+includeParser = do
+    char '.'
+    name <- simpleSelectorName
+    params <- fmap (fromMaybe []) $ optionMaybe $ parens $ commaSep expressionParser
+    statementEnd
+    return $ Include name params
+    
+    
 
 -- ALL PLACEHOLDERS HERE
 
@@ -129,12 +147,14 @@ expressionParser = unexpected "unimplemented"
 ruleParser = do
     prop <- many1 $ lower <|> char '-'
     colon
-    val <- manyTill anyChar $ lookAhead $ oneOf ";}"
+    val <- manyTill anyChar statementEnd
     return $ Rule prop val
     <?> "Expected rule"
 
 variableParser = do
     id <- identifier
     colon
-    val <- manyTill anyChar $ lookAhead $ oneOf ";}"
+    val <- manyTill anyChar statementEnd
     return $ Variable id val
+
+statementEnd = (lookAhead (char '}') <|> char ';') >> whiteSpace
