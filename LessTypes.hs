@@ -19,8 +19,41 @@ data Rule = Rule Property Expression deriving Show
 
 data Param = Param Identifier (Maybe Expression) deriving Show
 
+--TYPES FOR SELECTOR
+--nested list: group, adjacent, descendant, child
+type Selector = [SelectorCombinator]
+data SelectorCombinator = Combinator Char SimpleSelectorSeq SelectorCombinator
+                        | Terminus SimpleSelectorSeq
+                        deriving (Eq, Ord)
+type SimpleSelectorSeq = [SimpleSelector]
+data SimpleSelector = TypeSelector String -- h1
+                   | UniversalSelector -- *
+                   | AttributeSelector String -- [placeholder]
+                   | ClassSelector String
+                   | PseudoClassSelector String
+                   | IdSelector String
+                   | NotSelector SimpleSelector
+                   | ParentRef
+                   deriving (Eq, Ord)
+
+instance Show SelectorCombinator where
+    show (Combinator t ss sc) = (concat $ map show ss) ++ (combSep t) ++ (show sc)
+        where
+        combSep ' ' = " "
+        combSep c = ' ' : c : " "
+    show (Terminus ss) = concat $ map show ss
+
+instance Show SimpleSelector where
+    show (TypeSelector x) = x
+    show UniversalSelector = "*"
+    show (AttributeSelector x) = '[' : x ++ "]"
+    show (ClassSelector x) = '.' : x
+    show (IdSelector x) = '#' : x
+    show (NotSelector s) = ":not(" ++ (show s) ++ ")"
+    show (PseudoClassSelector x) = ':' : x
+    show ParentRef = "&"
+
 --FIXME PLACEHOLDER
-type Selector = String
 type Identifier = String
 type Property = String
 type Expression = String

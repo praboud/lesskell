@@ -2,6 +2,8 @@ module LessParser (lessParser) where
 import LessTypes
 import Text.ParserCombinators.Parsec hiding (whitespace)
 import qualified Text.ParserCombinators.Parsec.Token as T
+import Data.Char (isSpace)
+import Data.Maybe (fromMaybe)
 
 -- some useful helpers --
 
@@ -34,11 +36,18 @@ lessLanguage = T.LanguageDef
 
 lessLexer = T.makeTokenParser lessLanguage
 
-whiteSpace = T.whiteSpace lessLexer
+comment = ((try (string "//") >> manyTill anyChar newline) <|> (string "/*" >> manyTill anyChar (try ( string "*/")))) >> return ()
+simpleSpace = skipMany1 (satisfy isSpace)
+whiteSpace = skipMany (simpleSpace <|> comment)
+whiteSpace1 = ((skipMany1 (satisfy isSpace) >> whiteSpace) <|> (comment >> whiteSpace1))
 inWhiteSpace = between whiteSpace whiteSpace
 identifier = T.identifier lessLexer
 colon = T.colon lessLexer
+comma = T.comma lessLexer
+rangle = inWhiteSpace $ char '>'
 braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
+parens = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
+
 semiSep = flip sepEndBy1 $ T.semi lessLexer
 
 
@@ -66,9 +75,10 @@ mixinParser = do
                 , body = body
                 , guards = guards
                 }
+    <?> "Expected rule or mixin"
     where
         bodyParser sel = do
-            (s, r, m, v) <- fmap filterStatements $ braces statementParser 
+            (s, r, m, v) <- fmap filterStatements (braces statementParser <?> "Expected statements")
             return $ Scope
                 { selector = sel
                 , rules = r
@@ -76,13 +86,31 @@ mixinParser = do
                 , mixins = m
                 , variables = v
                 }
+            <?> "Expected body expression for ruleset/mixin"
 
-selParser = many $ alphaNum <|> oneOf ".#:&*-_ "
---selParser = fmap concat $ many (fsing alphaNum <|> fsing (oneOf ".#:&*") <|> char )
+selParser :: Parser Selector
+selParser = sepBy1 selCombParser comma <?> "Expected selector"
+    where
+    selCombParser = do
+        group <- many1 simpleSelParser
+        fmap (fromMaybe (Terminus group)) $ optionMaybe $ try $ joinParser group
+        <?> "Expected selector combinator"
+    joinParser sel = do
+        t <-  (try $ inWhiteSpace $ oneOf "+>") <|> (whiteSpace1 >> return ' ')
+        comb <- selCombParser
+        return $ Combinator t sel comb
+    simpleSelParser = (char '#' >> sel >>= return . IdSelector)
+                      <|> (char '.' >> sel >>= return . ClassSelector)
+                      <|> (char '[' >> manyTill anyChar (char ']') >>= return . AttributeSelector)
+                      <|> (try (string ":not") >> parens simpleSelParser >>= return . NotSelector)
+                      <|> (char ':' >> sel >>= return . PseudoClassSelector)
+                      <|> (char '*' >> return UniversalSelector)
+                      <|> (sel >>= return . TypeSelector)
+                      <|> (char '&' >> return ParentRef)
+                      <?> "Expected simple selector"
+    sel = many1 (alphaNum <|> oneOf "-_") <?> "Expected selector name"
 
-betweenParens = between (char '(' >> whiteSpace) (whiteSpace >> char ')')
-
-paramParser = betweenParens $ many singleParam
+paramParser = parens $ many singleParam
     where
         singleParam = do
             id <- identifier
@@ -91,7 +119,7 @@ paramParser = betweenParens $ many singleParam
             char ';'
             return $ Param id deflt
 
-guardParser = betweenParens $ boolExpressionParser
+guardParser = parens $ boolExpressionParser
 
 -- ALL PLACEHOLDERS HERE
 
@@ -99,10 +127,11 @@ boolExpressionParser = unexpected "unimplemented"
 expressionParser = unexpected "unimplemented"
 
 ruleParser = do
-    prop <- many $ lower <|> char '-'
+    prop <- many1 $ lower <|> char '-'
     colon
     val <- manyTill anyChar $ lookAhead $ oneOf ";}"
     return $ Rule prop val
+    <?> "Expected rule"
 
 variableParser = do
     id <- identifier
