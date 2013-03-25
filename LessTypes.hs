@@ -73,7 +73,13 @@ data ProcessError = ProcessError String
 --FIXME PLACEHOLDER
 type Identifier = String
 type Property = String
-type Expression = String
+data Expression = Literal String
+                | Identifier String
+                | Number Rational Unit
+                | BinOp Operator Expression Expression
+                deriving (Show, Eq)
+data Unit = NA | Pt | Px | Percent | Em deriving (Show, Eq)
+type Operator = Char
 
 {-
 data Expression = Pixel Float

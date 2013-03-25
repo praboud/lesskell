@@ -142,19 +142,29 @@ includeParser = do
 -- ALL PLACEHOLDERS HERE
 
 boolExpressionParser = unexpected "unimplemented"
-expressionParser = unexpected "unimplemented"
+expressionParser = --(parens fullExpressionParser) <|> 
+                   (fmap Identifier identifier)
+                   <|> (fmap Literal quotedString)
+                   <|> (fmap Literal $ manyTill anyChar $ lookAhead $ oneOf ";}")
+
+quotedString = do
+    quot <- oneOf "\"'"
+    str <- manyTill anyChar $ char quot
+    return $ quot : str ++ [quot]
 
 ruleParser = do
     prop <- many1 $ lower <|> char '-'
     colon
-    val <- manyTill anyChar statementEnd
+    val <- expressionParser
+    statementEnd
     return $ Rule prop val
     <?> "Expected rule"
 
 variableParser = do
     id <- identifier
     colon
-    val <- manyTill anyChar statementEnd
+    val <- expressionParser
+    statementEnd
     return $ Variable id val
 
 statementEnd = (lookAhead (char '}') <|> char ';') >> whiteSpace

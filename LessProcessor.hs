@@ -124,8 +124,17 @@ eval scope@(Scope sel r i sub m v) = do
         -- allVars variables from parent scope, our scope, and given as parameters
         allVars = inherit vs (inherit v (fromJust paramVars))
 
+lookupVariable [] id = Left $ ProcessError ("Unbound variable " ++ id)
+lookupVariable ((Variable name val):vs) id
+    | name == id = return val
+    | otherwise = lookupVariable vs id
+
 evalRule :: [Variable] -> Rule -> Either ProcessError CSSRule
-evalRule vs (Rule prop exp) = return $ CSSRule prop (show exp)
+evalRule vs (Rule prop exp) = evalExp vs exp >>= return . CSSRule prop
+
+evalExp :: [Variable] -> Expression -> Either ProcessError String
+evalExp _ (Literal s) = return s
+evalExp vs (Identifier v) = lookupVariable vs v >>= evalExp vs
 
 evalBool :: [Variable] -> BoolExpression -> Bool
 evalBool _ _ = True
