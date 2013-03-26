@@ -21,7 +21,7 @@ main = do
     file <- getContents
     let fileLines = lines file
     let parsed = (captureError fileLines $ parse lessParser "less" file)
-    print parsed
+    --print parsed
     let processed = parsed >>= captureError fileLines . process
     case processed of
         Left err -> putStrLn err
