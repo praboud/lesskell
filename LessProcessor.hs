@@ -2,7 +2,7 @@ module LessProcessor (process) where
 
 import LessTypes
 import LessSelectors (addSelectorContext)
-import Data.Maybe (fromJust, isJust)
+import Data.Maybe (fromMaybe, fromJust, isJust)
 import Control.Monad ((>=>))
 
 ---------------------
@@ -16,7 +16,7 @@ process xs = do
     (s, [], i, m, v) = filterStatements xs
 
 extractMixins :: [Scope] -> [Mixin]
-extractMixins = map (\s -> Mixin [] s []) . filter scopeIsSimpleClass
+extractMixins = map (\s -> Mixin [] s Nothing) . filter scopeIsSimpleClass
     where
     scopeIsSimpleClass (Scope [Terminus [ClassSelector _]] _ _ _ _ _) = True
     scopeIsSimpleClass _ = False
@@ -71,16 +71,16 @@ evalInclude alreadySeen (Scope sel r i sub m v) = do
 ----------------------
 
 lookupMixin :: Selector -> [Mixin] -> [Variable] -> Include -> Either ProcessError Scope
-lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i subs m v) guards):ms) vs include@(Include name2 gives)
+lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i subs m v) guards):_) vs include@(Include name2 gives)
     | nameMatch && parityMatch && guardMatch = return $ Scope sel r i subs m allVars
-    | otherwise = lookupMixin sel ms vs include
     where
     nameMatch = name1 == name2
     parityMatch = isJust paramVars
-    guardMatch = all (evalBool $ inherit vs $ fromJust paramVars) guards
+    guardMatch = fromMaybe True $ guards >>= return . evalBool (inherit vs $ fromJust paramVars)
     paramVars = processParams takes gives
     -- allVars variables from parent scope, our scope, and given as parameters
     allVars = inherit vs (inherit v (fromJust paramVars))
+lookupMixin sel (_:ms) vs include = lookupMixin sel ms vs include
 lookupMixin _ _ _ (Include name _) = Left (ProcessError ("Could not match include " ++ name ))
 
 contextualizeSel psel (Scope csel cr ci csub cm cv) = 

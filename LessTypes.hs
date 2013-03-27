@@ -29,7 +29,7 @@ data Include = Include String [Expression] deriving Show
 data Mixin = Mixin
     { args :: [Param]
     , body :: Scope
-    , guards :: [BoolExpression]
+    , guards :: Maybe BoolExpression
     } deriving Show
 data Rule = Rule Property Expression deriving Show
 type Property = String

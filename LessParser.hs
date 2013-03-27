@@ -46,6 +46,7 @@ colon = T.colon lessLexer
 comma = T.comma lessLexer
 braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
 parens = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
+semiSep = flip sepBy1 (inWhiteSpace $ char ';')
 
 commaSep = flip sepBy1 $ T.comma lessLexer
 
@@ -64,13 +65,13 @@ statementParser = many1 $ try mixinParser
 
 mixinParser = do
     sel <- selParser
-    --args <- optionMaybe paramParser
-    let args = Nothing
+    args <- optionMaybe $ try paramParser
     case args of
         Nothing -> bodyParser sel >>= return . ScopeS 
         Just a -> do
             whiteSpace
-            guards <- guardParser
+            --guards <- optionMaybe $ try guardParser
+            let guards = Nothing
             body <- bodyParser sel
             return $ MixinS $ Mixin
                 { args = a
@@ -115,13 +116,12 @@ selParser = sepBy1 selCombParser comma <?> "Expected selector"
 
 simpleSelectorName = many1 (alphaNum <|> oneOf "-_") <?> "Expected selector name"
 
-paramParser = parens $ many singleParam
+paramParser = parens $ semiSep singleParam
     where
         singleParam = do
             id <- identifier
             whiteSpace
-            deflt <- optionMaybe (char ':' >> whiteSpace >> expressionParser)
-            char ';'
+            deflt <- optionMaybe (char ':' >> whiteSpace >> expressionParser ";)")
             return $ case deflt of
                 Nothing -> Param id
                 Just val -> DefaultParam id val
@@ -131,20 +131,10 @@ guardParser = parens $ boolExpressionParser
 includeParser = do
     char '.'
     name <- simpleSelectorName
-    params <- fmap (fromMaybe []) $ optionMaybe $ parens $ commaSep expressionParser
+    params <- fmap (fromMaybe []) $ optionMaybe $ parens $ commaSep $ expressionParser ";)"
     statementEnd
     return $ Include name params
     
-    
-
--- ALL PLACEHOLDERS HERE
-
-boolExpressionParser = unexpected "unimplemented"
-expressionParser = --(parens fullExpressionParser) <|> 
-                   (fmap Identifier identifier)
-                   <|> (fmap Literal quotedString)
-                   <|> (fmap Literal $ manyTill anyChar $ lookAhead $ oneOf ";}")
-
 quotedString = do
     quot <- oneOf "\"'"
     str <- manyTill anyChar $ char quot
@@ -153,7 +143,7 @@ quotedString = do
 ruleParser = do
     prop <- many1 $ lower <|> char '-'
     colon
-    val <- expressionParser
+    val <- expressionParser ";}"
     statementEnd
     return $ Rule prop val
     <?> "Expected rule"
@@ -161,8 +151,16 @@ ruleParser = do
 variableParser = do
     id <- identifier
     colon
-    val <- expressionParser
+    val <- expressionParser ";}"
     statementEnd
     return $ Variable id val
 
 statementEnd = (lookAhead (char '}') <|> char ';') >> whiteSpace
+
+-- ALL PLACEHOLDERS HERE
+
+boolExpressionParser = unexpected "unimplemented"
+expressionParser end = --(parens fullExpressionParser) <|> 
+                   (fmap Identifier identifier)
+                   <|> (fmap Literal quotedString)
+                   <|> (fmap Literal $ manyTill anyChar $ lookAhead $ oneOf end)
