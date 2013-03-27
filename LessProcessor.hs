@@ -1,137 +1,55 @@
 module LessProcessor (process) where
-import LessParser
+
 import LessTypes
-import Data.List
-import Data.Function
-import Data.Maybe (fromMaybe, fromJust, isJust)
+import LessSelectors (addSelectorContext)
+import Data.Maybe (fromJust, isJust)
 import Control.Monad ((>=>))
 
-class Ord x => Inherit x where
-    conflict :: x -> x -> [x]
-
-instance Eq Mixin where
-    m1 == m2 = (selector $ body m1) == (selector $ body m2)
-
-instance Ord Mixin where
-    compare m1 m2 = compare (selector $ body m1) (selector $ body m2)
-
-instance Inherit Mixin where
-    conflict s1@(Mixin a1 b1 g1) s2@(Mixin a2 b2 g2)
-        | length a1 /= length a2 = [s1, s2]
-        | g1 /= g2 = [s1, s2]
-        | otherwise = [s2]
-
-instance Eq Variable where
-    (Variable id1 _) == (Variable id2 _) = id1 == id2
-
-instance Ord Variable where
-    compare (Variable id1 _) (Variable id2 _) = compare id1 id2
-
-instance Inherit Variable where
-    conflict v1 v2 = [v2]
-
-instance Eq CSSRule where
-    (CSSRule p1 _) == (CSSRule p2 _) = p1 == p2
-
-instance Ord CSSRule where
-    compare (CSSRule p1 _) (CSSRule p2 _) = compare p1 p2
-
-instance Inherit CSSRule where
-    conflict v1 v2 = [v2]
-
-{-
-renderScope (Scope sel rules sub mix var) = (renderSelector sel) ++ " {\n" ++ unlines (map (renderRule . eval mix var) rules) ++ "}\n"
-
-renderRule (Rule prop exp) = prop ++ ": " ++ exp ++ ";"
-renderSelector = intercalate ", " . map show
-
--- FIXME PLACEHOLDER
-eval :: [Mixin] -> [Variable] -> Rule -> Rule
-eval _ _ r = r
--}
-
+---------------------
+-- Main Processing --
+---------------------
 process :: [Statement] -> Either ProcessError String
 process xs = do
     (m', v') <- bindMixVar s m v
-    eval (Scope [Dummy] [] i s m' v')  >>= return . concat . map show
+    evalScope (Scope [Dummy] [] i s m' v')  >>= return . concat . map show
     where
     (s, [], i, m, v) = filterStatements xs
 
 extractMixins :: [Scope] -> [Mixin]
 extractMixins = map (\s -> Mixin [] s []) . filter scopeIsSimpleClass
     where
-    scopeIsSimpleClass (Scope [Terminus [ClassSelector name1]] _ _ _ _ _) = True
+    scopeIsSimpleClass (Scope [Terminus [ClassSelector _]] _ _ _ _ _) = True
     scopeIsSimpleClass _ = False
 
--- output intermediates
-data CSS = CSS Selector [CSSRule]
-data CSSRule = CSSRule Property String
-
-instance Show CSS where
-    show (CSS sel rules) = case rules of
-        [] -> ""
-        rules -> (intercalate ", " $ map show sel) ++ " {\n" ++ (intercalate ";\n" $ map show rules) ++ "\n}\n"
-
-instance Show CSSRule where
-    show (CSSRule p v) = p ++ ": " ++ v
-
+---------------------
+-- Main Processors --
+---------------------
 
 -- main function which squashes less types down to straight css
--- this gets a little complicated, so it bares commenting
--- the overall concept is to convert a scope (less version of a class with variables, mixins and subscopes)
+-- this gets a little complicated, so it bears commenting
+-- the overall concept is to convert a scope
+-- (less version of a class with variables, mixins and subscopes)
 -- into a css class
-eval :: Scope -> Either ProcessError [CSS]
-eval scope@(Scope sel r i sub m v) = do
+evalScope :: Scope -> Either ProcessError [CSS]
+evalScope (Scope sel r i sub m v) = do
     -- evaluate variables in their own scope
     (m', v') <- bindMixVar sub m v
-    --let x = trace ("evaling " ++ show sel ++ ": " ++ (unwords $ map (show . selector . body) m')) i
 
     -- include all include statements
     -- these introduce new subscopes and rules into the scope
-    --includes <- mapM (lookupMixin m v) i
-    (includeRules, includeCSS) <- mapM (lookupMixin m' v') i >>= evalIncludes []
-    let includeCSS' = map (\(CSS csel rules) -> CSS (addSelectorContext sel csel) rules) includeCSS
+    (includeRules, includeCSS) <- mapM (lookupMixin sel m' v') i >>= evalIncludes []
 
-    -- evaluate all of our
-    ourSubs <- fmap concat $ mapM (eval . (contextualizeSel sel) . (contextualizeEnv m' v')) sub
+    -- evaluate all of our subscopes
+    ourCSS <- evalScopes sel m' v' sub
 
-
-    -- *** evaluate all rules ***
-    -- with the context from this scope
+    -- eval all rules with the context from this scope
     ourRules <- mapM (evalRule v') r
-    -- with the context from the respective mixin
-    --includeRules <- mapM (\(Scope _ r _ _ _ v) -> mapM (evalRule v) r) includes >>= return . concat
-    return $ ((CSS sel (inherit includeRules ourRules)) : ourSubs ++ includeCSS')
 
-contextualizeEnv :: [Mixin] -> [Variable] -> Scope -> Scope
-contextualizeEnv pm pv (Scope csel cr ci csub cm cv) = Scope csel cr ci csub newMixins newVar
-    where
-    newMixins = inherit pm cm
-    newVar = inherit pv cv
+    -- assemble our rules and subs, and those from includes
+    -- our own rules take precedence over included rules
+    return $ ((CSS sel (inherit includeRules ourRules)) : ourCSS ++ includeCSS)
 
-contextualizeSel psel (Scope csel cr ci csub cm cv) = (Scope newSel cr ci csub cm cv)
-    where
-    newSel = addSelectorContext psel csel
-
-lookupMixin :: [Mixin] -> [Variable] -> Include -> Either ProcessError Scope
-lookupMixin [] _ (Include name _) = Left (ProcessError ("Could not match include " ++ name ))
-lookupMixin ((Mixin takes s@(Scope sel@[Terminus [ClassSelector name1]] r i subs m v) guards):ms) vs include@(Include name2 gives)
-    | nameMatch && parityMatch && guardMatch = return $ Scope [Terminus [ParentRef]] r i subs m allVars
-    | otherwise = lookupMixin ms vs include
-    where
-    nameMatch = name1 == name2
-    parityMatch = isJust paramVars
-    guardMatch = all (evalBool $ inherit vs $ fromJust paramVars) guards
-    paramVars = processParams takes gives
-    -- allVars variables from parent scope, our scope, and given as parameters
-    allVars = inherit vs (inherit v (fromJust paramVars))
-
-bindMixVar :: [Scope] -> [Mixin] -> [Variable] -> Either ProcessError ([Mixin], [Variable])
-bindMixVar sub m v = do
-    v' <- mapM (evalVar v) v -- not sure about this
-    let m' = map (\(Mixin p s g) -> Mixin p (contextualizeEnv m' v' s) g)
-             $ inherit (extractMixins sub) m
-    return (m', v')
+evalScopes sel m v = mapM (evalScope . (contextualizeSel sel) . (contextualizeEnv m v)) >=> return . concat 
 
 evalIncludes :: [Include] -> [Scope] -> Either ProcessError ([CSSRule], [CSS])
 evalIncludes alreadySeen scopes = do
@@ -142,10 +60,48 @@ evalInclude :: [Include] -> Scope -> Either ProcessError ([CSSRule], [CSS])
 evalInclude alreadySeen (Scope sel r i sub m v) = do
     (m', v') <- bindMixVar sub m v
     ourRules <- mapM (evalRule v') r
-    ourCSS <- mapM eval (map (contextualizeEnv m' v') sub) >>= return . concat
-    (includeRules, includeCSS) <- mapM (lookupMixin m' v') i >>= evalIncludes alreadySeen
+    ourCSS <- evalScopes sel m' v' sub
+    (includeRules, includeCSS) <-
+        mapM (lookupMixin sel m' v' >=> return . contextualizeSel sel) i
+        >>= evalIncludes alreadySeen
     return (ourRules ++ includeRules, ourCSS ++ includeCSS)
 
+----------------------
+-- Helper Functions --
+----------------------
+
+lookupMixin :: Selector -> [Mixin] -> [Variable] -> Include -> Either ProcessError Scope
+lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i subs m v) guards):ms) vs include@(Include name2 gives)
+    | nameMatch && parityMatch && guardMatch = return $ Scope sel r i subs m allVars
+    | otherwise = lookupMixin sel ms vs include
+    where
+    nameMatch = name1 == name2
+    parityMatch = isJust paramVars
+    guardMatch = all (evalBool $ inherit vs $ fromJust paramVars) guards
+    paramVars = processParams takes gives
+    -- allVars variables from parent scope, our scope, and given as parameters
+    allVars = inherit vs (inherit v (fromJust paramVars))
+lookupMixin _ _ _ (Include name _) = Left (ProcessError ("Could not match include " ++ name ))
+
+contextualizeSel psel (Scope csel cr ci csub cm cv) = 
+    (Scope newSel cr ci csub cm cv)
+    where
+    newSel = addSelectorContext psel csel
+
+contextualizeEnv :: [Mixin] -> [Variable] -> Scope -> Scope
+contextualizeEnv pm pv (Scope csel cr ci csub cm cv) = Scope csel cr ci csub newMixins newVar
+    where
+    newMixins = inherit pm cm
+    newVar = inherit pv cv
+
+bindMixVar :: [Scope] -> [Mixin] -> [Variable] -> Either ProcessError ([Mixin], [Variable])
+bindMixVar sub m v = do
+    v' <- mapM (evalVar v) v -- not sure about this
+    let m' = map (\(Mixin p s g) -> Mixin p (contextualizeEnv m' v' s) g)
+             $ inherit (extractMixins sub) m
+    return (m', v')
+
+-- some stuff having to do with expressions
 lookupVariable [] id = Left $ ProcessError ("Unbound variable " ++ id)
 lookupVariable ((Variable name val):vs) id
     | name == id = return val
@@ -159,10 +115,10 @@ evalVar vs (Variable id exp) = evalExp vs exp >>= return . Variable id . Literal
 evalExp :: [Variable] -> Expression -> Either ProcessError String
 evalExp _ (Literal s) = return s
 evalExp vs (Identifier v) = lookupVariable vs v >>= evalExp vs
+-- FIXME: I need to evaluate expressions
 
 evalBool :: [Variable] -> BoolExpression -> Bool
 evalBool _ _ = True
-
 
 processParams :: [Param] -> [Expression] -> Maybe [Variable]
 processParams [] [] = Just []
@@ -174,66 +130,3 @@ processParams (x:xs) (y:ys) = processParams xs ys >>= return . ((Variable name y
     name = case x of
         Param n -> n
         DefaultParam n _ -> n
-
-
-parityP :: [x] -> [y] -> Bool
-parityP [] [] = True
-parityP _ [] = False
-parityP [] _ = False
-parityP (_:xs) (_:ys) = parityP xs ys
-
-addScopeContext parent@(Scope sp _ _ _ mp vp) (Scope sc rc ic sub mc vc) = Scope newSel rc ic sub newMix newVar
-    where
-    newSel = addSelectorContext sp sc
-    newMix = inherit ((Mixin [] parent []) : mp) mc
-    newVar = inherit vp vc
-
-addSelectorContext :: Selector -> Selector -> Selector
-addSelectorContext psel csel = concat $ map (\x -> fromMaybe (withoutParentRef x) (withParentRef x)) csel
-    where
-    withParentRef = subParentRefComb psel
-    withoutParentRef c = map (\p -> appendCombToComb p ' ' c) psel
-
-subParentRefComb :: Selector -> SelectorCombinator -> Maybe Selector
-subParentRefComb psel (Terminus seq) = subParentRef psel seq
-subParentRefComb psel csel@(Combinator t seq comb) = case this of
-    Nothing -> next >>= Just . map (Combinator t seq)
-    Just this' -> Just $ map (\(p, c) -> appendCombToComb p t c) $ cross this' $ fromMaybe [comb] next
-    where
-    this = subParentRef psel seq
-    next = subParentRefComb psel comb
-
-appendCombToComb Dummy ' ' comb = comb
---appendCombToComb comb ' ' Dummy = comb
-appendCombToComb (Terminus seq) t comb = Combinator t seq comb
-appendCombToComb (Combinator t1 seq comb1) t2 comb2 = Combinator t1 seq $ appendCombToComb comb1 t2 comb2
--- FIXME: I should have a ProcessError cascade up
-appendCombToComb _ _ _ = undefined
-
-subParentRef :: Selector -> SimpleSelectorSeq -> Maybe Selector
-subParentRef _ [] = Nothing
-subParentRef psel (c:cs) = case c of
-    ParentRef -> Just $ map (flip appendSeqToComb cs) psel
-    _ -> subParentRef psel cs >>= return . map (flip prependSeqToComb c)
-
-prependSeqToComb :: SelectorCombinator -> SimpleSelector -> SelectorCombinator
-prependSeqToComb (Terminus xs) x = Terminus (x:xs)
-prependSeqToComb (Combinator t xs c) x = Combinator t (x:xs) c
-
-appendSeqToComb :: SelectorCombinator -> SimpleSelectorSeq -> SelectorCombinator
-appendSeqToComb (Combinator t xs c) ys = Combinator t xs $ appendSeqToComb c ys
-appendSeqToComb (Terminus xs) ys = Terminus (xs ++ ys)
-
-cross :: [x] -> [y] -> [(x, y)]
-cross xs ys = concat [[(x, y) | y <- ys] | x <- xs]
-
-
-inherit :: Inherit x => [x] -> [x] -> [x]
-inherit parent child = inherit_h (sort parent) (sort child)
-    where
-    inherit_h [] ys = ys
-    inherit_h xs [] = xs
-    inherit_h xt@(x:xs) yt@(y:ys)
-        | x == y = conflict x y ++ inherit xs ys
-        | x < y = x : inherit xs yt
-        | otherwise = y : inherit xt ys

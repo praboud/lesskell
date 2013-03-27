@@ -1,6 +1,6 @@
 module LessParser (lessParser) where
 import LessTypes
-import Text.ParserCombinators.Parsec hiding (whitespace)
+import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as T
 import Data.Char (isSpace)
 import Data.Maybe (fromMaybe)
@@ -44,11 +44,9 @@ inWhiteSpace = between whiteSpace whiteSpace
 identifier = T.identifier lessLexer
 colon = T.colon lessLexer
 comma = T.comma lessLexer
-rangle = inWhiteSpace $ char '>'
 braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
 parens = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
 
-semiSep = flip sepEndBy1 $ T.semi lessLexer
 commaSep = flip sepBy1 $ T.comma lessLexer
 
 

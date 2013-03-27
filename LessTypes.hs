@@ -1,5 +1,12 @@
 module LessTypes where
 
+import Data.List (intercalate, sort)
+
+
+--------------------------
+-- Top Level Statements --
+--------------------------
+
 data Statement = ScopeS Scope
                | RuleS Rule
                | MixinS Mixin
@@ -24,15 +31,25 @@ data Mixin = Mixin
     , body :: Scope
     , guards :: [BoolExpression]
     } deriving Show
-data Variable = Variable Identifier Expression deriving Show
 data Rule = Rule Property Expression deriving Show
+type Property = String
 
-data Param = Param Identifier
-           | DefaultParam Identifier Expression
-           deriving Show
+filterStatements :: [Statement] -> ([Scope], [Rule], [Include], [Mixin], [Variable])
+filterStatements (x:xs) = case x of
+        ScopeS    a -> (a:s, r, i, m, v)
+        RuleS     a -> (s, a:r, i, m, v)
+        IncludeS  a -> (s, r, a:i, m, v)
+        MixinS    a -> (s, r, i, a:m, v)
+        VariableS a -> (s, r, i, m, a:v)
+    where
+    (s, r, i, m, v) = filterStatements xs
+filterStatements [] = ([], [], [], [], [])
 
---TYPES FOR SELECTOR
---nested list: group, adjacent, descendant, child
+
+---------------
+-- Selectors --
+---------------
+
 type Selector = [SelectorCombinator]
 data SelectorCombinator = Combinator Char SimpleSelectorSeq SelectorCombinator
                         | Terminus SimpleSelectorSeq
@@ -67,12 +84,28 @@ instance Show SimpleSelector where
     show (PseudoClassSelector x) = ':' : x
     show ParentRef = "&"
 
--- error reporting
+
+---------------------
+-- Error Reporting --
+---------------------
+
+-- could stand to be expanded
+
 data ProcessError = ProcessError String
 
---FIXME PLACEHOLDER
+
+-----------------
+-- Expressions --
+-----------------
+
+data Variable = Variable Identifier Expression deriving Show
+
+data Param = Param Identifier
+           | DefaultParam Identifier Expression
+           deriving Show
+
 type Identifier = String
-type Property = String
+
 data Expression = Literal String
                 | Identifier String
                 | Number Rational Unit
@@ -99,13 +132,69 @@ data BoolExpression = Yep
                     | And BoolExpression BoolExpression
                     | BoolOperation String Expression Expression deriving (Show, Eq)
 
-filterStatements :: [Statement] -> ([Scope], [Rule], [Include], [Mixin], [Variable])
-filterStatements (x:xs) = case x of
-        ScopeS    a -> (a:s, r, i, m, v)
-        RuleS     a -> (s, a:r, i, m, v)
-        IncludeS  a -> (s, r, a:i, m, v)
-        MixinS    a -> (s, r, i, a:m, v)
-        VariableS a -> (s, r, i, m, a:v)
+
+-----------------------------
+-- Output Intermediataries --
+-----------------------------
+
+data CSS = CSS Selector [CSSRule]
+data CSSRule = CSSRule Property String
+
+instance Show CSS where
+    show (CSS sel rules) = case rules of
+        [] -> ""
+        rules -> (intercalate ", " $ map show sel) ++ " {\n" ++ (intercalate ";\n" $ map show rules) ++ "\n}\n"
+
+instance Show CSSRule where
+    show (CSSRule p v) = p ++ ": " ++ v
+
+
+-------------------------------
+-- Inherit Class and Helpers --
+-------------------------------
+
+-- general idea is to define when two declarations overlap, and which
+-- declaration to use as the right one when there is an overlap
+
+inherit :: Inherit x => [x] -> [x] -> [x]
+inherit parent child = inherit_h (sort parent) (sort child)
     where
-    (s, r, i, m, v) = filterStatements xs
-filterStatements [] = ([], [], [], [], [])
+    inherit_h [] ys = ys
+    inherit_h xs [] = xs
+    inherit_h xt@(x:xs) yt@(y:ys)
+        | x == y = conflict x y ++ inherit xs ys
+        | x < y = x : inherit xs yt
+        | otherwise = y : inherit xt ys
+
+class Ord x => Inherit x where
+    conflict :: x -> x -> [x]
+
+instance Eq Mixin where
+    m1 == m2 = (selector $ body m1) == (selector $ body m2)
+
+instance Ord Mixin where
+    compare m1 m2 = compare (selector $ body m1) (selector $ body m2)
+
+instance Inherit Mixin where
+    conflict s1@(Mixin a1 _ g1) s2@(Mixin a2 _ g2)
+        | length a1 /= length a2 = [s1, s2]
+        | g1 /= g2 = [s1, s2]
+        | otherwise = [s2]
+
+instance Eq Variable where
+    (Variable id1 _) == (Variable id2 _) = id1 == id2
+
+instance Ord Variable where
+    compare (Variable id1 _) (Variable id2 _) = compare id1 id2
+
+instance Inherit Variable where
+    conflict _ v2 = [v2]
+
+instance Eq CSSRule where
+    (CSSRule p1 _) == (CSSRule p2 _) = p1 == p2
+
+instance Ord CSSRule where
+    compare (CSSRule p1 _) (CSSRule p2 _) = compare p1 p2
+
+instance Inherit CSSRule where
+    conflict _ v2 = [v2]
