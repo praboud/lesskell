@@ -8,10 +8,10 @@ import Control.Monad ((>=>))
 ---------------------
 -- Main Processing --
 ---------------------
-process :: [Statement] -> Either ProcessError String
+process :: [Statement] -> Either ProcessError [CSS]
 process xs = do
     (m', v') <- bindMixVar s m v
-    evalScope (Scope [Dummy] [] i s m' v')  >>= return . concat . map show
+    evalScope (Scope [Dummy] [] i s m' v')
     where
     (s, [], i, m, v) = filterStatements xs
 

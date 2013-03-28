@@ -55,7 +55,9 @@ commaSep = flip sepBy1 $ T.comma lessLexer
 -- all of the actual parsers go here --
 ---------------------------------------
 
-lessParser = statementParser
+lessParser = many1 $ try mixinParser
+                  <|> fmap VariableS variableParser
+                  <|> fmap IncludeS includeParser
 
 statementParser :: Parser [Statement]
 statementParser = many1 $ try mixinParser

@@ -1,8 +1,11 @@
-import LessTypes
-import LessParser
-import LessProcessor
-import Text.ParserCombinators.Parsec
-import Text.Parsec.Error
+module Less(compile) where
+import LessTypes (ProcessError(ProcessError), CSS(CSS))
+import LessParser (lessParser)
+import LessProcessor (process)
+import Text.ParserCombinators.Parsec (parse, sourceLine, sourceColumn)
+import Text.Parsec.Error (errorMessages, errorPos, ParseError,
+    Message(Message, SysUnExpect, UnExpect, Expect ))
+import System.IO (stderr, hPutStrLn)
 
 class ErrorReport x where
     report :: [String] -> x -> String
@@ -17,15 +20,19 @@ captureError :: ErrorReport e => [String] -> Either e x -> Either String x
 captureError _ (Right x) = Right x
 captureError lines (Left e) = Left $ report lines e
 
+compile :: String -> Either String [CSS]
+compile contents = (captureError fileLines $ parse lessParser "less" contents)
+    >>= captureError fileLines . process
+    where
+    fileLines = lines contents
+
+{-
 main = do
-    file <- getContents
-    let fileLines = lines file
-    let parsed = (captureError fileLines $ parse lessParser "less" file)
-    --print parsed
-    let processed = parsed >>= captureError fileLines . process
-    case processed of
-        Left err -> putStrLn err
+    less <- getContents
+    case compile less >>= return . concat . map show of
+        Left err -> hPutStrLn stderr err
         Right val -> putStr val
+-}
 
 
 displayError contents err = "Parse error at line " ++ (show lineNum) ++ ", column " ++ (show colNum) ++ "\n" ++ snippet ++ "\n" ++ report
