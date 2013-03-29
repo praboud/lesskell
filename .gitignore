@@ -2,4 +2,3 @@
 *.o
 Less
 LessTester
-tests/*.out.css

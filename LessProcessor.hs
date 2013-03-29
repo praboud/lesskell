@@ -11,7 +11,7 @@ import Control.Monad ((>=>))
 process :: [Statement] -> Either ProcessError [CSS]
 process xs = do
     (m', v') <- bindMixVar s m v
-    evalScope (Scope [Dummy] [] i s m' v')
+    evalScope [] (Scope [Dummy] [] i s m' v')
     where
     (s, [], i, m, v) = filterStatements xs
 
@@ -25,31 +25,12 @@ extractMixins = map (\s -> Mixin [] s Nothing) . filter scopeIsSimpleClass
 -- Main Processors --
 ---------------------
 
--- main function which squashes less types down to straight css
--- this gets a little complicated, so it bears commenting
--- the overall concept is to convert a scope
--- (less version of a class with variables, mixins and subscopes)
--- into a css class
-evalScope :: Scope -> Either ProcessError [CSS]
-evalScope (Scope sel r i sub m v) = do
-    -- evaluate variables in their own scope
-    (m', v') <- bindMixVar sub m v
+evalScope alreadySeen scope@(Scope sel _ _ _ _ _) = do
+    (rules, css) <- evalInclude alreadySeen scope
+    return $ (CSS sel rules):css
 
-    -- include all include statements
-    -- these introduce new subscopes and rules into the scope
-    (includeRules, includeCSS) <- mapM (lookupMixin sel m' v') i >>= evalIncludes []
-
-    -- evaluate all of our subscopes
-    ourCSS <- evalScopes sel m' v' sub
-
-    -- eval all rules with the context from this scope
-    ourRules <- mapM (evalRule v') r
-
-    -- assemble our rules and subs, and those from includes
-    -- our own rules take precedence over included rules
-    return $ ((CSS sel (inherit includeRules ourRules)) : ourCSS ++ includeCSS)
-
-evalScopes sel m v = mapM (evalScope . (contextualizeSel sel) . (contextualizeEnv m v)) >=> return . concat 
+evalScopes alreadySeen sel m v = mapM (evalScope alreadySeen . prep) >=> return . concat 
+    where prep = (contextualizeSel sel) . (contextualizeEnv m v)
 
 evalIncludes :: [Include] -> [Scope] -> Either ProcessError ([CSSRule], [CSS])
 evalIncludes alreadySeen scopes = do
@@ -58,13 +39,16 @@ evalIncludes alreadySeen scopes = do
 
 evalInclude :: [Include] -> Scope -> Either ProcessError ([CSSRule], [CSS])
 evalInclude alreadySeen (Scope sel r i sub m v) = do
+    -- evaluate variables in their own scope
     (m', v') <- bindMixVar sub m v
+    -- evaluate all of our subscopes and rules
     ourRules <- mapM (evalRule v') r
-    ourCSS <- evalScopes sel m' v' sub
+    ourCSS <- evalScopes alreadySeen sel m' v' sub
+    -- include all other mixins, but ignore includes we have already seen
     (includeRules, includeCSS) <-
-        mapM (lookupMixin sel m' v' >=> return . contextualizeSel sel) i
+        mapM (lookupMixin sel m' v') i
         >>= evalIncludes alreadySeen
-    return (ourRules ++ includeRules, ourCSS ++ includeCSS)
+    return (inherit includeRules ourRules, ourCSS ++ includeCSS)
 
 ----------------------
 -- Helper Functions --

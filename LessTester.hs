@@ -43,6 +43,9 @@ runTestCase less css = do
     let passed = helper less' css'
     let action = if passed then "passed" else "failed"
     putStrLn $ action ++ " test on less file: " ++ less
+    case passed of
+        True -> return ()
+        False -> putStrLn "Saw" >> print less' >> putStrLn "\nExpected" >> print css'
     return passed
 lessTestDir = "tests"
 
