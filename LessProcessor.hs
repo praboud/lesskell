@@ -26,19 +26,19 @@ extractMixins = map (\s -> Mixin [] s Nothing) . filter scopeIsSimpleClass
 ---------------------
 
 evalScope alreadySeen scope@(Scope sel _ _ _ _ _) = do
-    (rules, css) <- evalInclude alreadySeen scope
+    (rules, css) <- eval alreadySeen scope
     return $ (CSS sel rules):css
 
 evalScopes alreadySeen sel m v = mapM (evalScope alreadySeen . prep) >=> return . concat 
     where prep = (contextualizeSel sel) . (contextualizeEnv m v)
 
-evalIncludes :: [Include] -> [Scope] -> Either ProcessError ([CSSRule], [CSS])
-evalIncludes alreadySeen scopes = do
-    (rules, css) <- mapM (evalInclude alreadySeen) scopes >>= return . unzip
+evalMul :: [Include] -> [Scope] -> Either ProcessError ([CSSRule], [CSS])
+evalMul alreadySeen scopes = do
+    (rules, css) <- mapM (eval alreadySeen) scopes >>= return . unzip
     return (concat rules, concat css)
 
-evalInclude :: [Include] -> Scope -> Either ProcessError ([CSSRule], [CSS])
-evalInclude alreadySeen (Scope sel r i sub m v) = do
+eval :: [Include] -> Scope -> Either ProcessError ([CSSRule], [CSS])
+eval alreadySeen (Scope sel r i sub m v) = do
     -- evaluate variables in their own scope
     (m', v') <- bindMixVar sub m v
     -- evaluate all of our subscopes and rules
@@ -47,7 +47,7 @@ evalInclude alreadySeen (Scope sel r i sub m v) = do
     -- include all other mixins, but ignore includes we have already seen
     (includeRules, includeCSS) <-
         mapM (lookupMixin sel m' v') i
-        >>= evalIncludes alreadySeen
+        >>= evalMul alreadySeen
     return (inherit includeRules ourRules, ourCSS ++ includeCSS)
 
 ----------------------
