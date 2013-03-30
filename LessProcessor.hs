@@ -88,7 +88,7 @@ bindMixVar sub m v = do
 
 -- some stuff having to do with expressions
 evalRule :: [Variable] -> Rule -> Either ProcessError CSSRule
-evalRule vs (Rule prop exps) = mapM (evalExp vs) exps >>= return . CSSRule prop . unwords . map show
+evalRule vs (Rule prop exps) = mapM (evalExp vs) exps >>= return . CSSRule prop . unwords . map show . concat
 
 evalVar vs (Variable id exps) = mapM (evalExp vs) exps >>= return . Variable id . concat
 
