@@ -1,11 +1,12 @@
-module Less(compile) where
-import LessTypes (ProcessError(ProcessError), CSS(CSS))
+--module Less(compile) where
+import LessTypes (ProcessError(ProcessError, TypeError), CSS(CSS))
 import LessParser (lessParser)
 import LessProcessor (process)
 import Text.ParserCombinators.Parsec (parse, sourceLine, sourceColumn)
 import Text.Parsec.Error (errorMessages, errorPos, ParseError,
     Message(Message, SysUnExpect, UnExpect, Expect ))
 import System.IO (stderr, hPutStrLn)
+import Debug.Trace
 
 class ErrorReport x where
     report :: [String] -> x -> String
@@ -15,6 +16,7 @@ instance ErrorReport ParseError where
 
 instance ErrorReport ProcessError where
     report _ (ProcessError s) = s
+    report _ (TypeError exp got) = "Expected " ++ exp ++ ", got: " ++ show got
 
 captureError :: ErrorReport e => [String] -> Either e x -> Either String x
 captureError _ (Right x) = Right x
@@ -26,13 +28,11 @@ compile contents = (captureError fileLines $ parse lessParser "less" contents)
     where
     fileLines = lines contents
 
-{-
 main = do
     less <- getContents
     case compile less >>= return . concat . map show of
         Left err -> hPutStrLn stderr err
         Right val -> putStr val
--}
 
 
 displayError contents err = "Parse error at line " ++ (show lineNum) ++ ", column " ++ (show colNum) ++ "\n" ++ snippet ++ "\n" ++ report

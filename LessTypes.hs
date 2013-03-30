@@ -24,14 +24,14 @@ data Scope = Scope
     } 
     deriving Show
 
-data Include = Include String [Expression] deriving Show
+data Include = Include String [[Expression]] deriving Show
 
 data Mixin = Mixin
     { args :: [Param]
     , body :: Scope
     , guards :: Maybe BoolExpression
     } deriving Show
-data Rule = Rule Property Expression deriving Show
+data Rule = Rule Property [Expression] deriving Show
 type Property = String
 
 filterStatements :: [Statement] -> ([Scope], [Rule], [Include], [Mixin], [Variable])
@@ -92,38 +92,35 @@ instance Show SimpleSelector where
 -- could stand to be expanded
 
 data ProcessError = ProcessError String
+                  | TypeError String Expression
 
 
 -----------------
 -- Expressions --
 -----------------
 
-data Variable = Variable Identifier Expression deriving Show
+data Variable = Variable Identifier [Expression] deriving Show
 
 data Param = Param Identifier
-           | DefaultParam Identifier Expression
+           | DefaultParam Identifier [Expression]
            deriving Show
 
 type Identifier = String
 
 data Expression = Literal String
-                | Identifier String
-                | Number Rational Unit
+                | Number Unit Double
+                | Identifier Int Identifier
                 | BinOp Operator Expression Expression
-                deriving (Show, Eq)
-data Unit = NA | Pt | Px | Percent | Em deriving (Show, Eq)
-type Operator = Char
+                | FuncApp Identifier [Expression]
+                deriving Eq
 
-{-
-data Expression = Pixel Float
-                | Point Float
-                | Em Float
-                | Percent Float
-                | Number Float
-                | Application String [Expression]
-                | Operation String Expression Expression
-                | Blob String deriving Show
--}
+instance Show Expression where
+    show (Literal s) = s
+    show (Number u n) = show n -- this is a placeholder, need special treatment for some things
+    show _ = "expression"
+
+data Unit = NA | Pt | Px | Percent | Em | Colour deriving (Show, Eq)
+type Operator = Char
 
 data BoolExpression = Yep
                     | Nope
@@ -133,9 +130,9 @@ data BoolExpression = Yep
                     | BoolOperation String Expression Expression deriving (Show, Eq)
 
 
------------------------------
--- Output Intermediataries --
------------------------------
+--------------------------
+-- Output Intermediates --
+--------------------------
 
 data CSS = CSS Selector [CSSRule]
 data CSSRule = CSSRule Property String

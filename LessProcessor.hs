@@ -2,6 +2,7 @@ module LessProcessor (process) where
 
 import LessTypes
 import LessSelectors (addSelectorContext)
+import LessExpressions
 import Data.Maybe (fromMaybe, fromJust, isJust)
 import Control.Monad ((>=>))
 
@@ -86,29 +87,23 @@ bindMixVar sub m v = do
     return (m', v')
 
 -- some stuff having to do with expressions
-lookupVariable [] id = Left $ ProcessError ("Unbound variable " ++ id)
-lookupVariable ((Variable name val):vs) id
-    | name == id = return val
-    | otherwise = lookupVariable vs id
-
 evalRule :: [Variable] -> Rule -> Either ProcessError CSSRule
-evalRule vs (Rule prop exp) = evalExp vs exp >>= return . CSSRule prop
+evalRule vs (Rule prop exps) = mapM (evalExp vs) exps >>= return . CSSRule prop . unwords . map show
 
-evalVar vs (Variable id exp) = evalExp vs exp >>= return . Variable id . Literal
-
-evalExp :: [Variable] -> Expression -> Either ProcessError String
-evalExp _ (Literal s) = return s
-evalExp vs (Identifier v) = lookupVariable vs v >>= evalExp vs
--- FIXME: I need to evaluate expressions
+evalVar vs (Variable id exps) = mapM (evalExp vs) exps >>= return . Variable id . concat
 
 evalBool :: [Variable] -> BoolExpression -> Bool
 evalBool _ _ = True
 
-processParams :: [Param] -> [Expression] -> Maybe [Variable]
+processParams :: [Param] -> [[Expression]] -> Maybe [Variable]
+-- match params expected against expressions given
+-- return Nothing if there is no match
+-- return Just [Variable] if there is, where the variables are a list of new
+-- bindings created by the params to expressions map
 processParams [] [] = Just []
+processParams [] _ = Nothing
 processParams ((Param _ ):_) [] = Nothing
 processParams ((DefaultParam v e):xs) [] = processParams xs [] >>= return . ((Variable v e):)
-processParams [] (_:_) = Nothing
 processParams (x:xs) (y:ys) = processParams xs ys >>= return . ((Variable name y):)
     where
     name = case x of

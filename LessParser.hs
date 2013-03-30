@@ -4,6 +4,9 @@ import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as T
 import Data.Char (isSpace)
 import Data.Maybe (fromMaybe)
+import Control.Monad ((>=>))
+
+import Debug.Trace
 
 -- some useful helpers --
 
@@ -47,6 +50,7 @@ comma = T.comma lessLexer
 braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
 parens = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
 semiSep = flip sepBy1 (inWhiteSpace $ char ';')
+float = T.float lessLexer
 
 commaSep = flip sepBy1 $ T.comma lessLexer
 
@@ -55,15 +59,22 @@ commaSep = flip sepBy1 $ T.comma lessLexer
 -- all of the actual parsers go here --
 ---------------------------------------
 
-lessParser = many1 $ try mixinParser
-                  <|> fmap VariableS variableParser
-                  <|> fmap IncludeS includeParser
+lessParser = do
+    statements <- many1
+                  (try mixinParser
+                  <|> fmap VariableS (variableParser)
+                  <|> fmap IncludeS (try includeParser)
+                  <?> "scope, mixin, variable, or include")
+    eof
+    return statements
 
 statementParser :: Parser [Statement]
-statementParser = many1 $ try mixinParser
-                  <|> fmap VariableS variableParser
-                  <|> fmap IncludeS includeParser
-                  <|> fmap RuleS ruleParser
+statementParser = trace "foo" $ many
+                  (try mixinParser
+                  <|> fmap VariableS (variableParser)
+                  <|> fmap IncludeS (includeParser)
+                  <|> fmap RuleS (ruleParser)
+                  <?> "scope, mixin, variable, rule, or include")
 
 mixinParser = do
     sel <- selParser
@@ -80,10 +91,9 @@ mixinParser = do
                 , body = body
                 , guards = guards
                 }
-    <?> "Expected rule or mixin"
     where
         bodyParser sel = do
-            (s, r, i, m, v) <- fmap filterStatements (braces statementParser <?> "Expected statements")
+            (s, r, i, m, v) <- fmap filterStatements (braces statementParser)
             return $ Scope
                 { selector = sel
                 , rules = r
@@ -92,15 +102,13 @@ mixinParser = do
                 , mixins = m
                 , variables = v
                 }
-            <?> "Expected body expression for ruleset/mixin"
 
 selParser :: Parser Selector
-selParser = sepBy1 selCombParser comma <?> "Expected selector"
+selParser = sepBy1 selCombParser comma
     where
     selCombParser = do
         group <- many1 simpleSelParser
         fmap (fromMaybe (Terminus group)) $ optionMaybe $ try $ joinParser group
-        <?> "Expected selector combinator"
     joinParser sel = do
         t <-  (try $ inWhiteSpace $ oneOf "+>") <|> (whiteSpace1 >> return ' ')
         comb <- selCombParser
@@ -113,17 +121,16 @@ selParser = sepBy1 selCombParser comma <?> "Expected selector"
                       <|> (char '*' >> return UniversalSelector)
                       <|> (sel >>= return . TypeSelector)
                       <|> (char '&' >> return ParentRef)
-                      <?> "Expected simple selector"
     sel = simpleSelectorName
 
-simpleSelectorName = many1 (alphaNum <|> oneOf "-_") <?> "Expected selector name"
+simpleSelectorName = many1 (alphaNum <|> oneOf "-_")
 
 paramParser = parens $ semiSep singleParam
     where
         singleParam = do
             id <- identifier
             whiteSpace
-            deflt <- optionMaybe (char ':' >> whiteSpace >> expressionParser ";)")
+            deflt <- optionMaybe (char ':' >> whiteSpace >> mulExpressionParser)
             return $ case deflt of
                 Nothing -> Param id
                 Just val -> DefaultParam id val
@@ -133,36 +140,76 @@ guardParser = parens $ boolExpressionParser
 includeParser = do
     char '.'
     name <- simpleSelectorName
-    params <- fmap (fromMaybe []) $ optionMaybe $ parens $ commaSep $ expressionParser ";)"
+    params <- fmap (fromMaybe []) $ optionMaybe $ parens $ commaSep $ mulExpressionParser
     statementEnd
     return $ Include name params
-    
+
+ruleParser = do
+    prop <- many1 $ lower <|> char '-'
+    colon
+    val <- mulExpressionParser
+    statementEnd
+    return $ Rule prop val
+
+variableParser = do
+    id <- identifier
+    colon
+    val <- mulExpressionParser
+    statementEnd
+    return $ Variable id val
+
+statementEnd = whiteSpace >> ((lookAhead (char '}') >> return ()) <|> (char ';' >> whiteSpace))
+
+-- ALL PLACEHOLDERS HERE
+
+boolExpressionParser = unexpected "unimplemented"
+mulExpressionParser = expressionParser `sepBy1` whiteSpace
+expressionParser = (parens arithmeticExpressionParser) <|> valueParser 
+
+valueParser = (fmap (Identifier 1) identifier)
+              <|> numberParser
+              <|> (fmap Literal quotedString)
+              <|> (fmap Literal $ many1 lower)
+
+numberParser = unitNumberParser
+    where
+    {-
+    colorParser = do
+        char '#'
+        str <- (try (count 6 hexDigit) >>= (\s -> return $ interleave s s)) <|> (count 6 hexDigit)
+        return $ Number $ foldr (\d s -> s * 16 + ord s - ord '0') 0 str
+    interleave [] ys = ys
+    interleave (x:xs) ys = x : (interleave ys xs)
+    -}
+    unitNumberParser = do
+        number <- float
+        unit <- unitParser
+        return $ Number unit number
+    units = 
+        [ ("%", Percent)
+        , ("em", Em)
+        , ("pt", Pt)
+        , ("px", Px)
+        , ("", NA)
+        ]
+    unitParser = (choice $ map (\(t, u) -> try (string t) >> return u) units) <?> "unit"
+                 
 quotedString = do
     quot <- oneOf "\"'"
     str <- manyTill anyChar $ char quot
     return $ quot : str ++ [quot]
 
-ruleParser = do
-    prop <- many1 $ lower <|> char '-'
-    colon
-    val <- expressionParser ";}"
-    statementEnd
-    return $ Rule prop val
-    <?> "Expected rule"
+-- groups of binary arithmetic operators in order of precendence
+-- (least to greatest)
+operators = 
+    [ ['+', '-']
+    , ['*', '/']
+    ]
 
-variableParser = do
-    id <- identifier
-    colon
-    val <- expressionParser ";}"
-    statementEnd
-    return $ Variable id val
-
-statementEnd = (lookAhead (char '}') <|> char ';') >> whiteSpace
-
--- ALL PLACEHOLDERS HERE
-
-boolExpressionParser = unexpected "unimplemented"
-expressionParser end = --(parens fullExpressionParser) <|> 
-                   (fmap Identifier identifier)
-                   <|> (fmap Literal quotedString)
-                   <|> (fmap Literal $ manyTill anyChar $ lookAhead $ oneOf end)
+arithmeticExpressionParser :: Parser Expression
+arithmeticExpressionParser = arith_h operators
+    where
+    arith_h [] = term
+    arith_h (ops:rest) = (arith_h rest) `chainl1` (choice (map opParser ops))
+    term = numberParser <|> parens arithmeticExpressionParser
+    opParser = char >=> return . BinOp
