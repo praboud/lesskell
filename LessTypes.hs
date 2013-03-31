@@ -1,7 +1,9 @@
 module LessTypes where
 
 import Data.List (intercalate, sort)
-
+import Data.Word(Word32)
+import Data.Bits((.&.), shiftR)
+import Text.Printf
 
 --------------------------
 -- Top Level Statements --
@@ -109,6 +111,7 @@ type Identifier = String
 
 data Expression = Literal String
                 | Number Unit Double
+                | Color Word32
                 | Identifier Int Identifier
                 | BinOp Operator Expression Expression
                 | FuncApp Identifier [Expression]
@@ -116,10 +119,28 @@ data Expression = Literal String
 
 instance Show Expression where
     show (Literal s) = s
-    show (Number u n) = show n -- this is a placeholder, need special treatment for some things
+    show (Number u n) = n' ++ show u
+        where
+        n' = if isInt n 6 then show (round n) else show n
+        isInt x n = (round $ 10^n * (x - (fromIntegral $ round x))) == 0
+    show (Color w) 
+        | a == 0 = '#' : printf "%06x" (shiftR w 8)
+        | otherwise = printf "rgba(%d,%d,%d,%d)" r g b a
+        where
+        r = w .&. 0xff000000
+        g = w .&. 0x00ff0000
+        b = w .&. 0x0000ff00
+        a = w .&. 0x000000ff
     show _ = "expression"
 
-data Unit = NA | Pt | Px | Percent | Em | Colour deriving (Show, Eq)
+instance Show Unit where
+    show NA = ""
+    show Pt = "pt"
+    show Px = "px"
+    show Percent = "%"
+    show Em = "em"
+
+data Unit = NA | Pt | Px | Percent | Em deriving Eq
 type Operator = Char
 
 data BoolExpression = Yep

@@ -2,8 +2,9 @@ module LessParser (lessParser) where
 import LessTypes
 import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as T
-import Data.Char (isSpace)
+import Data.Char (isSpace, ord)
 import Data.Maybe (fromMaybe)
+import Data.Bits ((.|.), shiftL)
 import Control.Monad ((>=>))
 
 import Debug.Trace
@@ -51,6 +52,7 @@ braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
 parens = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
 semiSep = flip sepBy1 (inWhiteSpace $ char ';')
 float = T.float lessLexer
+integer = T.integer lessLexer
 
 commaSep = flip sepBy1 $ T.comma lessLexer
 
@@ -171,18 +173,29 @@ valueParser = (fmap (Identifier 1) identifier)
               <|> (fmap Literal quotedString)
               <|> (fmap Literal $ many1 lower)
 
-numberParser = unitNumberParser
+numberParser = colorParser <|> unitNumberParser
     where
-    {-
     colorParser = do
         char '#'
-        str <- (try (count 6 hexDigit) >>= (\s -> return $ interleave s s)) <|> (count 6 hexDigit)
-        return $ Number $ foldr (\d s -> s * 16 + ord s - ord '0') 0 str
+        str <- (try (count 6 hexDigit) ) <|> ((count 3 hexDigit) >>= (\s -> return $ interleave s s))
+        return $ Color $ (flip shiftL 8) $ foldl (\tot digit -> (shiftL tot 4) .|. (fromIntegral $ hexVal digit)) 0 $ trace str str
     interleave [] ys = ys
     interleave (x:xs) ys = x : (interleave ys xs)
-    -}
+    hexVal digit
+        | zero <= d && d <= nine = d - zero
+        | a <= d && d <= f = d - a + 10
+        | au <= d && d <= fu = d - au + 10
+        where
+        d = ord digit
+        a = ord 'a'
+        f = ord 'f'
+        au = ord 'A'
+        fu = ord 'F'
+        zero = ord '0'
+        nine = ord '9'
+
     unitNumberParser = do
-        number <- float
+        number <- try float <|> (integer >>= return . fromIntegral)
         unit <- unitParser
         return $ Number unit number
     units = 
