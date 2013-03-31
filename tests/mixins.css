@@ -1,19 +1,19 @@
 .foo {
-display: inline
+display: inline;
 }
 .bar {
-display: inline
+display: inline;
 }
 .top {
-color: grey
+color: grey;
 }
 .top div.nested {
-display: inline
+display: inline;
 }
 .bottom {
 color: red;
-height: 100%
+height: 100%;
 }
 .bottom div.nested {
-display: inline
+display: inline;
 }

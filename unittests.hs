@@ -48,6 +48,4 @@ main = do
             . map (\d -> joinPath [lessTestDir, d])
        -- >>= mapM canonicalizePath
     let expectedFiles = map (flip replaceExtension ".css") lessFiles
-    mapM_ print lessFiles
-    mapM_ print expectedFiles
     mapM_ (uncurry runTestCase) $ zip lessFiles expectedFiles

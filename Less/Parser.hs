@@ -71,7 +71,7 @@ lessParser = do
     return statements
 
 statementParser :: Parser [Statement]
-statementParser = trace "foo" $ many
+statementParser = many
                   (try mixinParser
                   <|> fmap VariableS (variableParser)
                   <|> fmap IncludeS (includeParser)
@@ -223,6 +223,6 @@ arithmeticExpressionParser :: Parser Expression
 arithmeticExpressionParser = arith_h operators
     where
     arith_h [] = term
-    arith_h (ops:rest) = (arith_h rest) `chainl1` (choice (map opParser ops))
+    arith_h (ops:rest) = (arith_h rest) `chainl1` (try $ inWhiteSpace $ choice (map opParser ops))
     term = numberParser <|> parens arithmeticExpressionParser
     opParser = char >=> return . BinOp
