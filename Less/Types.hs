@@ -1,4 +1,4 @@
-module LessTypes where
+module Less.Types where
 
 import Data.List (intercalate, sort)
 import Data.Word(Word32)

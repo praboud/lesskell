@@ -1,8 +1,8 @@
-module LessProcessor (process) where
+module Less.Processor (process) where
 
-import LessTypes
-import LessSelectors (addSelectorContext)
-import LessExpressions
+import Less.Types
+import Less.Selectors (addSelectorContext)
+import Less.Expressions
 import Data.Maybe (fromMaybe, fromJust, isJust)
 import Control.Monad ((>=>))
 

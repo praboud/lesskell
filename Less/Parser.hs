@@ -1,5 +1,5 @@
-module LessParser (lessParser) where
-import LessTypes
+module Less.Parser (lessParser) where
+import Less.Types
 import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as T
 import Data.Char (isSpace, ord)

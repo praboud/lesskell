@@ -1,6 +1,6 @@
-module LessExpressions (evalExp) where
+module Less.Expressions (evalExp) where
 
-import LessTypes
+import Less.Types
 import Data.Maybe (fromJust)
 
 evalExp :: [Variable] -> Expression -> Either ProcessError [Expression]

@@ -1,12 +1,5 @@
-import Less(compile)
-import LessTypes (ProcessError(ProcessError), CSS(CSS), CSSRule(CSSRule))
-{-
-import LessParser (lessParser)
-import LessProcessor (process)
-import Text.ParserCombinators.Parsec (parse, sourceLine, sourceColumn)
-import Text.Parsec.Error (errorMessages, errorPos, ParseError,
-    Message(Message, SysUnExpect, UnExpect, Expect ))
--}
+import Less.Utils(compile)
+import Less.Types (ProcessError(ProcessError), CSS(CSS), CSSRule(CSSRule))
 import Data.Maybe (isJust, fromJust)
 import Control.Monad (foldM)
 import System.FilePath (takeExtension, replaceExtension, joinPath)

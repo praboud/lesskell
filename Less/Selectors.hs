@@ -1,6 +1,6 @@
-module LessSelectors (addSelectorContext) where
+module Less.Selectors (addSelectorContext) where
 
-import LessTypes
+import Less.Types
 import Data.Maybe (fromMaybe)
 
 addSelectorContext :: Selector -> Selector -> Selector
