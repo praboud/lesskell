@@ -95,6 +95,9 @@ instance Show SimpleSelector where
 
 data ProcessError = ProcessError String
                   | TypeError String Expression
+                  | ArgumentError [(ExpectedType, Maybe Expression)] [Expression]
+
+type Processed = Either ProcessError
 
 
 -----------------
@@ -149,6 +152,14 @@ data BoolExpression = Yep
                     | Or BoolExpression BoolExpression
                     | And BoolExpression BoolExpression
                     | BoolOperation String Expression Expression deriving (Show, Eq)
+
+----------------------
+-- Native Functions --
+----------------------
+
+type NativeFunction = [Variable] -> [Expression] -> Processed Expression
+
+data ExpectedType = NumberT | LiteralT | ColourT
 
 
 --------------------------

@@ -1,4 +1,4 @@
-module Less.Parser (lessParser) where
+module Less.Parser (lessParser, unitParser, colourParser) where
 import Less.Types
 import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as T
@@ -173,12 +173,13 @@ valueParser = (fmap (Identifier 1) identifier)
               <|> (fmap Literal quotedString)
               <|> (fmap Literal $ many1 lower)
 
-numberParser = colorParser <|> unitNumberParser
-    where
-    colorParser = do
-        char '#'
-        str <- (try (count 6 hexDigit) ) <|> ((count 3 hexDigit) >>= (\s -> return $ interleave s s))
-        return $ Color $ (flip shiftL 8) $ foldl (\tot digit -> (shiftL tot 4) .|. (fromIntegral $ hexVal digit)) 0 $ trace str str
+numberParser = colourParser <|> unitNumberParser
+
+colourParser = do
+    char '#'
+    str <- (try (count 6 hexDigit) ) <|> ((count 3 hexDigit) >>= (\s -> return $ interleave s s))
+    return $ Color $ (flip shiftL 8) $ foldl (\tot digit -> (shiftL tot 4) .|. (fromIntegral $ hexVal digit)) 0 $ trace str str
+    where 
     interleave [] ys = ys
     interleave (x:xs) ys = x : (interleave ys xs)
     hexVal digit
@@ -194,10 +195,13 @@ numberParser = colorParser <|> unitNumberParser
         zero = ord '0'
         nine = ord '9'
 
-    unitNumberParser = do
-        number <- try float <|> (integer >>= return . fromIntegral)
-        unit <- unitParser
-        return $ Number unit number
+unitNumberParser = do
+    number <- try float <|> (integer >>= return . fromIntegral)
+    unit <- unitParser
+    return $ Number unit number
+
+unitParser = (choice $ map (\(t, u) -> try (string t) >> return u) units) <?> "unit"
+    where
     units = 
         [ ("%", Percent)
         , ("em", Em)
@@ -205,7 +209,6 @@ numberParser = colorParser <|> unitNumberParser
         , ("px", Px)
         , ("", NA)
         ]
-    unitParser = (choice $ map (\(t, u) -> try (string t) >> return u) units) <?> "unit"
                  
 quotedString = do
     quot <- oneOf "\"'"
