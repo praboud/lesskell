@@ -23,7 +23,7 @@ data Scope = Scope
     , subscopes :: [Scope]
     , mixins :: [Mixin]
     , variables :: [Variable]
-    } 
+    }
     deriving Show
 
 data Include = Include String [[Expression]] deriving Show
@@ -126,7 +126,7 @@ instance Show Expression where
         where
         n' = if isInt n 6 then show (round n) else show n
         isInt x n = (round $ 10^n * (x - (fromIntegral $ round x))) == 0
-    show (Color w) 
+    show (Color w)
         | a == 0 = '#' : printf "%06x" (shiftR w 8)
         | otherwise = printf "rgba(%d,%d,%d,%d)" r g b a
         where

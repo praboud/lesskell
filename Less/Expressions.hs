@@ -16,7 +16,7 @@ evalExp vs (BinOp op l r) = do
     (Number _ r') <- getNumberWithUnit vs (Just unit) r
     let op' = evalOp op
     return $ [Number unit (op' l' r')]
-evalExp vs (FuncApp funcname args) = evalFunc nativeFunctions 
+evalExp vs (FuncApp funcname args) = evalFunc nativeFunctions
     where
     evalFunc [] = Left $ ProcessError "No function match found" --improve me!
     evalFunc ((name, f): fs) = if name == funcname
@@ -28,13 +28,13 @@ evalExp vs (Identifier 1 v) = evalVariable vs v >>= mapM (evalExp vs) >>= return
 
 evalOp = fromJust . flip lookup ops
 
-ops = 
+ops =
     [ ('+', (+))
     , ('-', (-))
     , ('*', (*))
     , ('/', (/))
     ]
-    
+
 -- helpers
 
 -- expects an expression evaling to a number, possibly of a particular unit
@@ -86,7 +86,7 @@ nativeFunctions =
     , ("atan", mathFun atan)
     ] :: [(String, NativeFunction)]
 
--- 
+--
 -- Nothing for required, Just defaultVal for optional
 getArgs :: [Variable] -> [(ExpectedType, Maybe Expression)] -> [Expression] -> Processed [Expression]
 getArgs vs exps args = parityCheck exps args
@@ -102,12 +102,12 @@ getArgs vs exps args = parityCheck exps args
             (Just a'') -> return a''
             Nothing -> Left $ TypeError "Number" a
         parityCheck es as >>= return . (v:)
-        
+
     correctType NumberT [x@(Number _ _)] = Just x
     correctType LiteralT [x@(Literal _)] = Just x
     correctType ColourT [x@(Color _)] = Just x
     correctType _ _ = Nothing
-    
+
 
 -- helper methods for native functions
 

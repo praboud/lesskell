@@ -30,7 +30,7 @@ evalScope alreadySeen scope@(Scope sel _ _ _ _ _) = do
     (rules, css) <- eval alreadySeen scope
     return $ (CSS sel rules):css
 
-evalScopes alreadySeen sel m v = mapM (evalScope alreadySeen . prep) >=> return . concat 
+evalScopes alreadySeen sel m v = mapM (evalScope alreadySeen . prep) >=> return . concat
     where prep = (contextualizeSel sel) . (contextualizeEnv m v)
 
 evalMul :: [Include] -> [Scope] -> Either ProcessError ([CSSRule], [CSS])
@@ -68,7 +68,7 @@ lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i subs m
 lookupMixin sel (_:ms) vs include = lookupMixin sel ms vs include
 lookupMixin _ _ _ (Include name _) = Left (ProcessError ("Could not match include " ++ name ))
 
-contextualizeSel psel (Scope csel cr ci csub cm cv) = 
+contextualizeSel psel (Scope csel cr ci csub cm cv) =
     (Scope newSel cr ci csub cm cv)
     where
     newSel = addSelectorContext psel csel

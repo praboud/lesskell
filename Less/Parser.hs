@@ -78,7 +78,7 @@ mixinParser = do
     sel <- selParser
     args <- optionMaybe $ try paramParser
     case args of
-        Nothing -> bodyParser sel >>= return . ScopeS 
+        Nothing -> bodyParser sel >>= return . ScopeS
         Just a -> do
             whiteSpace
             --guards <- optionMaybe $ try guardParser
@@ -166,7 +166,7 @@ boolExpressionParser = unexpected "unimplemented"
 
 mulExpressionParser = outerExpressionParser `sepBy1` whiteSpace1
 
-outerExpressionParser = (parens arithmeticExpressionParser) <|> valueParser 
+outerExpressionParser = (parens arithmeticExpressionParser) <|> valueParser
 innerExpressionParser = (try arithmeticExpressionParser) <|> valueParser
 
 valueParser = identifierParser
@@ -182,7 +182,7 @@ colourParser = do
     char '#'
     str <- (try (count 6 hexDigit) ) <|> ((count 3 hexDigit) >>= (\s -> return $ interleave s s))
     return $ Color $ (flip shiftL 8) $ foldl (\tot digit -> (shiftL tot 4) .|. (fromIntegral $ hexVal digit)) 0 str
-    where 
+    where
     interleave [] ys = ys
     interleave (x:xs) ys = x : (interleave ys xs)
     hexVal digit
@@ -205,7 +205,7 @@ unitNumberParser = do
 
 unitParser = (choice $ map (\(t, u) -> try (string t) >> return u) units) <?> "unit"
     where
-    units = 
+    units =
         [ ("%", Percent)
         , ("em", Em)
         , ("pt", Pt)
@@ -217,7 +217,7 @@ appParser = do
     name <- many lower
     args <- parens $ (innerExpressionParser `sepBy` comma)
     return $ FuncApp name args
-                 
+
 quotedString = do
     quot <- oneOf "\"'"
     str <- manyTill anyChar $ char quot
@@ -225,7 +225,7 @@ quotedString = do
 
 -- groups of binary arithmetic operators in order of precendence
 -- (least to greatest)
-operators = 
+operators =
     [ ['+', '-']
     , ['*', '/']
     ]
