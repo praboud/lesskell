@@ -7,8 +7,6 @@ import Data.Maybe (fromMaybe)
 import Data.Bits ((.|.), shiftL)
 import Control.Monad ((>=>))
 
-import Debug.Trace
-
 -- some useful helpers --
 
 lessLanguage = T.LanguageDef
@@ -40,7 +38,7 @@ lessLanguage = T.LanguageDef
 
 lessLexer = T.makeTokenParser lessLanguage
 
-comment = ((try (string "//") >> manyTill anyChar newline) <|> (string "/*" >> manyTill anyChar (try ( string "*/")))) >> return ()
+comment = ((try (string "//") >> manyTill anyChar newline) <|> (try (string "/*") >> manyTill anyChar (try ( string "*/")))) >> return ()
 simpleSpace = skipMany1 (satisfy isSpace)
 whiteSpace = skipMany (simpleSpace <|> comment)
 whiteSpace1 = ((skipMany1 (satisfy isSpace) >> whiteSpace) <|> (comment >> whiteSpace1))
@@ -65,8 +63,7 @@ lessParser = do
     statements <- many1
                   (try mixinParser
                   <|> fmap VariableS (variableParser)
-                  <|> fmap IncludeS (try includeParser)
-                  <?> "scope, mixin, variable, or include")
+                  <|> fmap IncludeS (try includeParser))
     eof
     return statements
 
@@ -75,8 +72,7 @@ statementParser = many
                   (try mixinParser
                   <|> fmap VariableS (variableParser)
                   <|> fmap IncludeS (includeParser)
-                  <|> fmap RuleS (ruleParser)
-                  <?> "scope, mixin, variable, rule, or include")
+                  <|> fmap RuleS (ruleParser))
 
 mixinParser = do
     sel <- selParser
@@ -165,20 +161,27 @@ statementEnd = whiteSpace >> ((lookAhead (char '}') >> return ()) <|> (char ';' 
 -- ALL PLACEHOLDERS HERE
 
 boolExpressionParser = unexpected "unimplemented"
-mulExpressionParser = expressionParser `sepBy1` whiteSpace
-expressionParser = (parens arithmeticExpressionParser) <|> valueParser 
 
-valueParser = (fmap (Identifier 1) identifier)
+--expression parsers
+
+mulExpressionParser = outerExpressionParser `sepBy1` whiteSpace1
+
+outerExpressionParser = (parens arithmeticExpressionParser) <|> valueParser 
+innerExpressionParser = (try arithmeticExpressionParser) <|> valueParser
+
+valueParser = identifierParser
               <|> numberParser
+              <|> try appParser
               <|> (fmap Literal quotedString)
               <|> (fmap Literal $ many1 lower)
 
 numberParser = colourParser <|> unitNumberParser
+identifierParser = fmap (Identifier 1) identifier
 
 colourParser = do
     char '#'
     str <- (try (count 6 hexDigit) ) <|> ((count 3 hexDigit) >>= (\s -> return $ interleave s s))
-    return $ Color $ (flip shiftL 8) $ foldl (\tot digit -> (shiftL tot 4) .|. (fromIntegral $ hexVal digit)) 0 $ trace str str
+    return $ Color $ (flip shiftL 8) $ foldl (\tot digit -> (shiftL tot 4) .|. (fromIntegral $ hexVal digit)) 0 str
     where 
     interleave [] ys = ys
     interleave (x:xs) ys = x : (interleave ys xs)
@@ -209,6 +212,11 @@ unitParser = (choice $ map (\(t, u) -> try (string t) >> return u) units) <?> "u
         , ("px", Px)
         , ("", NA)
         ]
+
+appParser = do
+    name <- many lower
+    args <- parens $ (innerExpressionParser `sepBy` comma)
+    return $ FuncApp name args
                  
 quotedString = do
     quot <- oneOf "\"'"
@@ -227,5 +235,5 @@ arithmeticExpressionParser = arith_h operators
     where
     arith_h [] = term
     arith_h (ops:rest) = (arith_h rest) `chainl1` (try $ inWhiteSpace $ choice (map opParser ops))
-    term = numberParser <|> parens arithmeticExpressionParser
+    term = outerExpressionParser
     opParser = char >=> return . BinOp

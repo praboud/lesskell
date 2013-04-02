@@ -16,6 +16,14 @@ evalExp vs (BinOp op l r) = do
     (Number _ r') <- getNumberWithUnit vs (Just unit) r
     let op' = evalOp op
     return $ [Number unit (op' l' r')]
+evalExp vs (FuncApp funcname args) = evalFunc nativeFunctions 
+    where
+    evalFunc [] = Left $ ProcessError "No function match found" --improve me!
+    evalFunc ((name, f): fs) = if name == funcname
+        then case f vs args of
+            Right v -> return [v]
+            Left e -> evalFunc fs
+        else evalFunc fs
 evalExp vs (Identifier 1 v) = evalVariable vs v >>= mapM (evalExp vs) >>= return . concat
 
 evalOp = fromJust . flip lookup ops
