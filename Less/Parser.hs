@@ -48,7 +48,7 @@ colon = T.colon lessLexer
 comma = T.comma lessLexer
 braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
 parens = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
-semiSep = flip sepBy1 (inWhiteSpace $ char ';')
+semiSep = flip sepBy (inWhiteSpace $ char ';')
 float = T.float lessLexer
 integer = T.integer lessLexer
 
