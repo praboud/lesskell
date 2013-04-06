@@ -1,6 +1,8 @@
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Less.Types where
 
-import Data.List (intercalate, sort)
+import Data.List (intercalate, sortBy)
 import Data.Word(Word32)
 import Data.Bits((.&.), shiftR)
 import Text.Printf
@@ -167,7 +169,7 @@ data ExpectedType = NumberT | LiteralT | ColourT
 --------------------------
 
 data CSS = CSS Selector [CSSRule]
-data CSSRule = CSSRule Property String
+data CSSRule = CSSRule Property String deriving Eq
 
 instance Show CSS where
     show (CSS sel rules) = case rules of
@@ -185,45 +187,35 @@ instance Show CSSRule where
 -- general idea is to define when two declarations overlap, and which
 -- declaration to use as the right one when there is an overlap
 
-inherit :: Inherit x => [x] -> [x] -> [x]
-inherit parent child = inherit_h (sort parent) (sort child)
+inherit :: Inherit x k => [x] -> [x] -> [x]
+inherit parent child = inherit_h (sortByKey parent) (sortByKey child)
     where
     inherit_h [] ys = ys
     inherit_h xs [] = xs
     inherit_h xt@(x:xs) yt@(y:ys)
-        | x == y = conflict x y ++ inherit xs ys
-        | x < y = x : inherit xs yt
+        | kx == ky = conflict x y ++ inherit xs ys
+        | kx < ky = x : inherit xs yt
         | otherwise = y : inherit xt ys
+        where
+        kx = key x
+        ky = key y
+    sortByKey = sortBy (\x y -> compare (key x) (key y))
 
-class Ord x => Inherit x where
+class Ord k => Inherit x k | x -> k where
     conflict :: x -> x -> [x]
+    key :: x -> k
 
-instance Eq Mixin where
-    m1 == m2 = (selector $ body m1) == (selector $ body m2)
-
-instance Ord Mixin where
-    compare m1 m2 = compare (selector $ body m1) (selector $ body m2)
-
-instance Inherit Mixin where
+instance Inherit Mixin Selector where
     conflict s1@(Mixin a1 _ g1) s2@(Mixin a2 _ g2)
         | length a1 /= length a2 = [s1, s2]
         | g1 /= g2 = [s1, s2]
         | otherwise = [s2]
+    key = selector . body
 
-instance Eq Variable where
-    (Variable id1 _) == (Variable id2 _) = id1 == id2
-
-instance Ord Variable where
-    compare (Variable id1 _) (Variable id2 _) = compare id1 id2
-
-instance Inherit Variable where
+instance Inherit Variable Identifier where
     conflict _ v2 = [v2]
+    key (Variable id _) = id
 
-instance Eq CSSRule where
-    (CSSRule p1 _) == (CSSRule p2 _) = p1 == p2
-
-instance Ord CSSRule where
-    compare (CSSRule p1 _) (CSSRule p2 _) = compare p1 p2
-
-instance Inherit CSSRule where
+instance Inherit CSSRule Property where
     conflict _ v2 = [v2]
+    key (CSSRule prop _) = prop
