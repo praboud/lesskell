@@ -16,12 +16,14 @@ data Statement = ScopeS Scope
                | MixinS Mixin
                | VariableS Variable
                | IncludeS Include
+               | ImportS Import
                deriving Show
 
 data Scope = Scope
     { selector :: Selector
     , rules :: [Rule]
     , includes :: [Include]
+    , imports :: [Import]
     , subscopes :: [Scope]
     , mixins :: [Mixin]
     , variables :: [Variable]
@@ -29,6 +31,8 @@ data Scope = Scope
     deriving Show
 
 data Include = Include String [[Expression]] deriving Show
+
+type Import = String
 
 data Mixin = Mixin
     { args :: [Param]
@@ -38,16 +42,17 @@ data Mixin = Mixin
 data Rule = Rule Property [Expression] deriving Show
 type Property = String
 
-filterStatements :: [Statement] -> ([Scope], [Rule], [Include], [Mixin], [Variable])
+filterStatements :: [Statement] -> ([Scope], [Rule], [Include], [Import], [Mixin], [Variable])
 filterStatements (x:xs) = case x of
-        ScopeS    a -> (a:s, r, i, m, v)
-        RuleS     a -> (s, a:r, i, m, v)
-        IncludeS  a -> (s, r, a:i, m, v)
-        MixinS    a -> (s, r, i, a:m, v)
-        VariableS a -> (s, r, i, m, a:v)
+        ScopeS    a -> (a:s, r, i, p, m, v)
+        RuleS     a -> (s, a:r, i, p, m, v)
+        IncludeS  a -> (s, r, a:i, p, m, v)
+        ImportS   a -> (s, r, i, a:p, m, v)
+        MixinS    a -> (s, r, i, p, a:m, v)
+        VariableS a -> (s, r, i, p, m, a:v)
     where
-    (s, r, i, m, v) = filterStatements xs
-filterStatements [] = ([], [], [], [], [])
+    (s, r, i, p, m, v) = filterStatements xs
+filterStatements [] = ([], [], [], [], [], [])
 
 
 ---------------

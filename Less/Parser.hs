@@ -91,11 +91,12 @@ mixinParser = do
                 }
     where
         bodyParser sel = do
-            (s, r, i, m, v) <- fmap filterStatements (braces statementParser)
+            (s, r, i, p, m, v) <- fmap filterStatements (braces statementParser)
             return $ Scope
                 { selector = sel
                 , rules = r
                 , includes = i
+                , imports = p
                 , subscopes = s
                 , mixins = m
                 , variables = v

@@ -12,21 +12,21 @@ import Control.Monad ((>=>))
 process :: [Statement] -> Either ProcessError [CSS]
 process xs = do
     (m', v') <- bindMixVar s m v
-    evalScope [] (Scope [Dummy] [] i s m' v')
+    evalScope [] (Scope [Dummy] [] i p s m' v')
     where
-    (s, [], i, m, v) = filterStatements xs
+    (s, [], i, p, m, v) = filterStatements xs
 
 extractMixins :: [Scope] -> [Mixin]
 extractMixins = map (\s -> Mixin [] s Nothing) . filter scopeIsSimpleClass
     where
-    scopeIsSimpleClass (Scope [Terminus [ClassSelector _]] _ _ _ _ _) = True
+    scopeIsSimpleClass (Scope [Terminus [ClassSelector _]] _ _ _ _ _ _) = True
     scopeIsSimpleClass _ = False
 
 ---------------------
 -- Main Processors --
 ---------------------
 
-evalScope alreadySeen scope@(Scope sel _ _ _ _ _) = do
+evalScope alreadySeen scope@(Scope sel _ _ _ _ _ _) = do
     (rules, css) <- eval alreadySeen scope
     return $ (CSS sel rules):css
 
@@ -39,7 +39,7 @@ evalMul alreadySeen scopes = do
     return (concat rules, concat css)
 
 eval :: [Include] -> Scope -> Either ProcessError ([CSSRule], [CSS])
-eval alreadySeen (Scope sel r i sub m v) = do
+eval alreadySeen (Scope sel r i p sub m v) = do
     -- evaluate variables in their own scope
     (m', v') <- bindMixVar sub m v
     -- evaluate all of our subscopes and rules
@@ -56,8 +56,8 @@ eval alreadySeen (Scope sel r i sub m v) = do
 ----------------------
 
 lookupMixin :: Selector -> [Mixin] -> [Variable] -> Include -> Either ProcessError Scope
-lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i subs m v) guards):_) vs include@(Include name2 gives)
-    | nameMatch && parityMatch && guardMatch = return $ Scope sel r i subs m allVars
+lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i p subs m v) guards):_) vs include@(Include name2 gives)
+    | nameMatch && parityMatch && guardMatch = return $ Scope sel r i p subs m allVars
     where
     nameMatch = name1 == name2
     parityMatch = isJust paramVars
@@ -68,13 +68,14 @@ lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i subs m
 lookupMixin sel (_:ms) vs include = lookupMixin sel ms vs include
 lookupMixin _ _ _ (Include name _) = Left (ProcessError ("Could not match include " ++ name ))
 
-contextualizeSel psel (Scope csel cr ci csub cm cv) =
-    (Scope newSel cr ci csub cm cv)
+contextualizeSel psel (Scope csel cr ci cp csub cm cv) =
+    (Scope newSel cr ci cp csub cm cv)
     where
     newSel = addSelectorContext psel csel
 
 contextualizeEnv :: [Mixin] -> [Variable] -> Scope -> Scope
-contextualizeEnv pm pv (Scope csel cr ci csub cm cv) = Scope csel cr ci csub newMixins newVar
+contextualizeEnv pm pv (Scope csel cr ci cp csub cm cv) =
+    Scope csel cr ci cp csub newMixins newVar
     where
     newMixins = inherit pm cm
     newVar = inherit pv cv
