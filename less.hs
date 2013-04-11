@@ -1,8 +1,10 @@
-import Less.Utils (compile)
+import Less.Utils (compile, report)
 import System.IO (stderr, hPutStrLn)
+import Control.Monad.Trans.Either
 
 main = do
     less <- getContents
-    case compile less >>= return . concat . map show of
-        Left err -> hPutStrLn stderr err
-        Right val -> putStr val
+    eitherT
+        (hPutStrLn stderr . report less)
+        (putStr . concat . map show)
+        (compile less)

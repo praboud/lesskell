@@ -1,11 +1,14 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
+
 module Less.Types where
 
 import Data.List (intercalate, sortBy)
 import Data.Word(Word32)
 import Data.Bits((.&.), shiftR)
 import Text.Printf
+import Control.Monad.Trans.Either (EitherT)
+import Text.Parsec.Error (ParseError)
 
 --------------------------
 -- Top Level Statements --
@@ -103,8 +106,15 @@ instance Show SimpleSelector where
 data ProcessError = ProcessError String
                   | TypeError String Expression
                   | ArgumentError [(ExpectedType, Maybe Expression)] [Expression]
+                  | ParseError ParseError
+
+rethrowParseError :: Either ParseError a -> Processed a
+rethrowParseError (Right x) = Right x
+rethrowParseError (Left e) = Left (ParseError e)
 
 type Processed = Either ProcessError
+
+type IOProcessed = EitherT ProcessError IO
 
 
 -----------------

@@ -4,14 +4,16 @@ import Less.Types
 import Less.Selectors (addSelectorContext)
 import Less.Expressions
 import Data.Maybe (fromMaybe, fromJust, isJust)
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), liftM)
+import Control.Monad.Trans.Either
+import Less.Parser (parseLess)
 
 ---------------------
 -- Main Processing --
 ---------------------
-process :: [Statement] -> Either ProcessError [CSS]
+process :: [Statement] -> IOProcessed [CSS]
 process xs = do
-    (m', v') <- bindMixVar s m v
+    (m', v') <- hoistEither $ bindMixVar s m v
     evalScope [] (Scope [Dummy] [] i p s m' v')
     where
     (s, [], i, p, m, v) = filterStatements xs
@@ -26,36 +28,46 @@ extractMixins = map (\s -> Mixin [] s Nothing) . filter scopeIsSimpleClass
 -- Main Processors --
 ---------------------
 
+evalScope :: [Include] -> Scope -> IOProcessed [CSS]
 evalScope alreadySeen scope@(Scope sel _ _ _ _ _ _) = do
     (rules, css) <- eval alreadySeen scope
     return $ (CSS sel rules):css
 
+evalScopes :: [Include] -> Selector -> [Mixin] -> [Variable] -> [Scope] -> IOProcessed [CSS]
 evalScopes alreadySeen sel m v = mapM (evalScope alreadySeen . prep) >=> return . concat
     where prep = (contextualizeSel sel) . (contextualizeEnv m v)
 
-evalMul :: [Include] -> [Scope] -> Either ProcessError ([CSSRule], [CSS])
+evalMul :: [Include] -> [Scope] -> IOProcessed ([CSSRule], [CSS])
 evalMul alreadySeen scopes = do
     (rules, css) <- mapM (eval alreadySeen) scopes >>= return . unzip
     return (concat rules, concat css)
 
-eval :: [Include] -> Scope -> Either ProcessError ([CSSRule], [CSS])
+eval :: [Include] -> Scope -> IOProcessed ([CSSRule], [CSS])
 eval alreadySeen (Scope sel r i p sub m v) = do
+    imported <-
+        liftM concat
+        $ mapM importLess p
     -- evaluate variables in their own scope
-    (m', v') <- bindMixVar sub m v
+    (m', v') <- hoistEither $ bindMixVar sub m v
     -- evaluate all of our subscopes and rules
-    ourRules <- mapM (evalRule v') r
+    ourRules <- hoistEither $ mapM (evalRule v') r
     ourCSS <- evalScopes alreadySeen sel m' v' sub
     -- include all other mixins, but ignore includes we have already seen
     (includeRules, includeCSS) <-
-        mapM (lookupMixin sel m' v') i
+        hoistEither (mapM (lookupMixin sel m' v') i)
         >>= evalMul alreadySeen
-    return (inherit includeRules ourRules, ourCSS ++ includeCSS)
+    right (inherit includeRules ourRules, ourCSS ++ includeCSS)
+    where
+    importLess = EitherT . liftM parseLess . readFile
+
+--bindEitherT :: (a -> Either e b) -> EitherT e m a -> EitherT e m b
+--bindEitherT f = EitherT . liftM (>>= f) . runEitherT
 
 ----------------------
 -- Helper Functions --
 ----------------------
 
-lookupMixin :: Selector -> [Mixin] -> [Variable] -> Include -> Either ProcessError Scope
+lookupMixin :: Selector -> [Mixin] -> [Variable] -> Include -> Processed Scope
 lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i p subs m v) guards):_) vs include@(Include name2 gives)
     | nameMatch && parityMatch && guardMatch = return $ Scope sel r i p subs m allVars
     where
@@ -80,7 +92,7 @@ contextualizeEnv pm pv (Scope csel cr ci cp csub cm cv) =
     newMixins = inherit pm cm
     newVar = inherit pv cv
 
-bindMixVar :: [Scope] -> [Mixin] -> [Variable] -> Either ProcessError ([Mixin], [Variable])
+bindMixVar :: [Scope] -> [Mixin] -> [Variable] -> Processed ([Mixin], [Variable])
 bindMixVar sub m v = do
     v' <- mapM (evalVar v) v -- not sure about this
     let m' = map (\(Mixin p s g) -> Mixin p (contextualizeEnv m' v' s) g)
@@ -88,7 +100,7 @@ bindMixVar sub m v = do
     return (m', v')
 
 -- some stuff having to do with expressions
-evalRule :: [Variable] -> Rule -> Either ProcessError CSSRule
+evalRule :: [Variable] -> Rule -> Processed CSSRule
 evalRule vs (Rule prop exps) = mapM (evalExp vs) exps >>= return . CSSRule prop . unwords . map show . concat
 
 evalVar vs (Variable id exps) = mapM (evalExp vs) exps >>= return . Variable id . concat

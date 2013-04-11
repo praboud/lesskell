@@ -1,7 +1,8 @@
 import Less.Utils(compile)
-import Less.Types (ProcessError(ProcessError), CSS(CSS), CSSRule(CSSRule))
+import Less.Types
 import Data.Maybe (isJust, fromJust)
-import Control.Monad (foldM)
+import Control.Monad (foldM, (>=>), liftM)
+import Control.Monad.Trans.Either
 import System.FilePath (takeExtension, replaceExtension, joinPath)
 import System.Directory (getDirectoryContents, canonicalizePath)
 
@@ -23,23 +24,23 @@ ruleInSet r1 (r2:rs)
     | r1 == r2 = return rs
     | otherwise = ruleInSet r1 rs >>= return . (r2:)
 
-helper less css = case (less, css) of
-        (Right less', Right css') -> equivalentCSS less' css'
-        (_, _) -> False
-
+readLess :: FilePath -> IOProcessed String
+readLess = EitherT . liftM Right . readFile
+readAndCompile :: FilePath -> IOProcessed [CSS]
+readAndCompile = readLess >=> compile
 
 -- responsible for comparing less and css to check for equivalence
 runTestCase :: FilePath -> FilePath -> IO Bool
 runTestCase less css = do
-    less' <- readFile less >>= return . compile
-    css' <- readFile css >>= return . compile
-    let passed = helper less' css'
-    let action = if passed then "passed" else "failed"
-    putStrLn $ action ++ " test on less file: " ++ less
-    case passed of
-        True -> return ()
-        False -> putStrLn "Saw" >> print less' >> putStrLn "\nExpected" >> print css'
-    return passed
+    let compiled = do
+        less' <- readAndCompile less
+        css' <- readAndCompile css
+        return (less', css')
+    eitherT
+        (return . const False)
+        (return . uncurry equivalentCSS)
+        compiled
+
 lessTestDir = "tests"
 
 main = do

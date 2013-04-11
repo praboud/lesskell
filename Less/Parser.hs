@@ -1,4 +1,4 @@
-module Less.Parser (lessParser, unitParser, colourParser) where
+module Less.Parser (lessParser, parseLess, unitParser, colourParser) where
 import Less.Types
 import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as T
@@ -6,6 +6,9 @@ import Data.Char (isSpace, ord)
 import Data.Maybe (fromMaybe)
 import Data.Bits ((.|.), shiftL)
 import Control.Monad ((>=>))
+
+parseLess :: String -> Processed [Statement]
+parseLess = rethrowParseError . parse lessParser "less"
 
 -- some useful helpers --
 
@@ -134,7 +137,7 @@ paramParser = parens $ semiSep singleParam
                 Nothing -> Param id
                 Just val -> DefaultParam id val
 
-guardParser = parens $ boolExpressionParser
+--guardParser = parens $ boolExpressionParser
 
 includeParser = do
     char '.'
@@ -161,7 +164,7 @@ statementEnd = whiteSpace >> ((lookAhead (char '}') >> return ()) <|> (char ';' 
 
 -- ALL PLACEHOLDERS HERE
 
-boolExpressionParser = unexpected "unimplemented"
+--boolExpressionParser = unexpected "unimplemented"
 
 --expression parsers
 
@@ -190,6 +193,7 @@ colourParser = do
         | zero <= d && d <= nine = d - zero
         | a <= d && d <= f = d - a + 10
         | au <= d && d <= fu = d - au + 10
+        | otherwise = undefined
         where
         d = ord digit
         a = ord 'a'
