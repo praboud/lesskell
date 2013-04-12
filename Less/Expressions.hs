@@ -22,9 +22,10 @@ evalExp vs (FuncApp funcname args) = evalFunc nativeFunctions
     evalFunc ((name, f): fs) = if name == funcname
         then case f vs args of
             Right v -> return [v]
-            Left e -> evalFunc fs
+            Left _ -> evalFunc fs
         else evalFunc fs
 evalExp vs (Identifier 1 v) = evalVariable vs v >>= mapM (evalExp vs) >>= return . concat
+evalExp _ (Identifier _ _) = undefined -- fixme
 
 evalOp = fromJust . flip lookup ops
 
@@ -43,10 +44,10 @@ getNumberWithUnit :: [Variable] -> Maybe Unit -> Expression -> Either ProcessErr
 getNumberWithUnit vs uexp e = do
     evald <- evalExp vs e
     case evald of
-        [n@(Number u val)] -> if unitMatch u
+        [n@(Number u _)] -> if unitMatch u
             then return n
             else Left $ TypeError (show u) e
-        x -> Left $ TypeError "number" e
+        _ -> Left $ TypeError "number" e
     where
     unitMatch u = case (uexp, u) of
         (Nothing, _) -> True
@@ -94,6 +95,7 @@ getArgs vs exps args = parityCheck exps args
     err = Left $ ArgumentError exps args
 
     parityCheck [] [] = return []
+    parityCheck [] _ = err
     parityCheck ((_, Nothing): _) [] = err
     parityCheck ((_, Just v):es) [] = parityCheck es [] >>= return . (v:)
     parityCheck ((t, _):es) (a:as) = do
