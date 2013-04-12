@@ -3,10 +3,13 @@ module Less.Processor (process) where
 import Less.Types
 import Less.Selectors (addSelectorContext)
 import Less.Expressions
-import Data.Maybe (fromMaybe, fromJust, isJust)
-import Control.Monad ((>=>), liftM)
-import Control.Monad.Trans.Either
 import Less.Parser (parseLess)
+
+import Data.Maybe (fromMaybe, fromJust, isJust)
+import Control.Monad ((>=>), liftM, foldM)
+import Control.Monad.Trans.Either
+
+import System.FilePath (takeExtension, addExtension)
 
 ---------------------
 -- Main Processing --
@@ -44,31 +47,24 @@ evalMul alreadySeen scopes = do
 
 eval :: [Include] -> Scope -> IOProcessed ([CSSRule], [CSS])
 eval alreadySeen (Scope sel r i p sub m v) = do
-    imported <-
-        liftM concat
-        $ mapM importLess p
+    (ps, pr, pi, pm, pv) <- evalImports p
     -- evaluate variables in their own scope
-    (m', v') <- hoistEither $ bindMixVar sub m v
+    (m', v') <- hoistEither $ bindMixVar sub (inherit pm m) (inherit pv v)
     -- evaluate all of our subscopes and rules
-    ourRules <- hoistEither $ mapM (evalRule v') r
-    ourCSS <- evalScopes alreadySeen sel m' v' sub
+    ourRules <- hoistEither $ mapM (evalRule v') (inherit pr r)
+    ourCSS <- evalScopes alreadySeen sel m' v' (sub ++ ps)
     -- include all other mixins, but ignore includes we have already seen
     (includeRules, includeCSS) <-
-        hoistEither (mapM (lookupMixin sel m' v') i)
+        hoistEither (mapM (lookupMixin sel m' v') (i ++ pi))
         >>= evalMul alreadySeen
     right (inherit includeRules ourRules, ourCSS ++ includeCSS)
-    where
-    importLess = EitherT . liftM parseLess . readFile
-
---bindEitherT :: (a -> Either e b) -> EitherT e m a -> EitherT e m b
---bindEitherT f = EitherT . liftM (>>= f) . runEitherT
 
 ----------------------
 -- Helper Functions --
 ----------------------
 
 lookupMixin :: Selector -> [Mixin] -> [Variable] -> Include -> Processed Scope
-lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i p subs m v) guards):_) vs include@(Include name2 gives)
+lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i p subs m v) guards):_) vs (Include name2 gives)
     | nameMatch && parityMatch && guardMatch = return $ Scope sel r i p subs m allVars
     where
     nameMatch = name1 == name2
@@ -122,3 +118,20 @@ processParams (x:xs) (y:ys) = processParams xs ys >>= return . ((Variable name y
     name = case x of
         Param n -> n
         DefaultParam n _ -> n
+
+-- recursively process all imports
+-- don't import things twice
+evalImports :: [Import] -> IOProcessed ([Scope], [Rule], [Include], [Mixin], [Variable])
+evalImports = liftM snd . foldM evalImport_h ([], ([], [], [], [], [])) . map assumeLessExtension
+    where
+    assumeLessExtension path = case takeExtension path of
+        "" -> addExtension path "less"
+        _ -> path
+    evalImport_h acc@(alreadySeen, (s1, r1, i1, m1, v1)) path
+        | path `elem` alreadySeen = return acc
+        | otherwise = do
+            (s2, r2, i2, p2, m2, v2) <- liftM filterStatements $ EitherT $ liftM parseLess $ readFile path
+            let combined = (s1 ++ s2, r1 ++ r2, i1 ++ i2, m1 ++ m2, v1 ++ v2)
+            foldM evalImport_h (alreadySeen', combined) p2
+        where
+        alreadySeen' = path : alreadySeen

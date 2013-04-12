@@ -5,6 +5,7 @@ import Control.Monad (foldM, (>=>), liftM)
 import Control.Monad.Trans.Either
 import System.FilePath (takeExtension, replaceExtension, joinPath)
 import System.Directory (getDirectoryContents, canonicalizePath)
+import Text.Printf (printf)
 
 -- responsible for checking if two css sets are equivalent
 equivalentCSS :: [CSS] -> [CSS] -> Bool
@@ -43,10 +44,25 @@ runTestCase less css = do
 
 lessTestDir = "tests"
 
+
 main = do
     lessFiles <- getDirectoryContents lessTestDir
         >>= return . filter ((".less"==) . takeExtension)
             . map (\d -> joinPath [lessTestDir, d])
        -- >>= mapM canonicalizePath
     let expectedFiles = map (flip replaceExtension ".css") lessFiles
-    mapM_ (uncurry runTestCase) $ zip lessFiles expectedFiles
+    results <- mapM (uncurry runTestCase) $ zip lessFiles expectedFiles
+    let total = length results
+    let passed = length $ filter (==True) results
+
+    mapM_ (printCase total) $ zip3 results lessFiles [1..]
+
+    putStrLn ""
+    if total == passed
+        then putStrLn "aw yiss"
+        else printf "%d / %d tests passed\n" passed total
+    where
+    printCase :: Int -> (Bool, FilePath, Int) -> IO()
+    printCase t (success, path, n) = printf "[%d / %d] test %s %s\n" n t path msg
+        where
+        msg = if success then "passed" else "failed"

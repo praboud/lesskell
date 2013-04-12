@@ -65,6 +65,7 @@ commaSep = flip sepBy1 $ T.comma lessLexer
 lessParser = do
     statements <- many1
                   (try mixinParser
+                  <|> fmap ImportS (importParser)
                   <|> fmap VariableS (variableParser)
                   <|> fmap IncludeS (try includeParser))
     eof
@@ -73,6 +74,7 @@ lessParser = do
 statementParser :: Parser [Statement]
 statementParser = many
                   (try mixinParser
+                  <|> fmap ImportS (importParser)
                   <|> fmap VariableS (variableParser)
                   <|> fmap IncludeS (includeParser)
                   <|> fmap RuleS (ruleParser))
@@ -145,6 +147,14 @@ includeParser = do
     params <- fmap (fromMaybe []) $ optionMaybe $ parens $ commaSep $ mulExpressionParser
     statementEnd
     return $ Include name params
+
+importParser = do
+    try $ string "@import"
+    whiteSpace1
+    quot <- oneOf "\"'"
+    path <- manyTill anyChar $ char quot
+    statementEnd
+    return path
 
 ruleParser = do
     prop <- many1 $ lower <|> char '-'

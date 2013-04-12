@@ -35,7 +35,7 @@ data Scope = Scope
 
 data Include = Include String [[Expression]] deriving Show
 
-type Import = String
+type Import = FilePath
 
 data Mixin = Mixin
     { args :: [Param]
@@ -234,3 +234,7 @@ instance Inherit Variable Identifier where
 instance Inherit CSSRule Property where
     conflict _ v2 = [v2]
     key (CSSRule prop _) = prop
+
+instance Inherit Rule Property where
+    conflict _ v2 = [v2]
+    key (Rule prop _) = prop
