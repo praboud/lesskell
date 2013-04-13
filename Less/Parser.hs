@@ -164,7 +164,7 @@ boolExpressionParser = unexpected "unimplemented"
 
 mulExpressionParser = outerExpressionParser `sepBy1` whiteSpace1
 
-outerExpressionParser = (parens arithmeticExpressionParser) <|> valueParser
+outerExpressionParser = (between (char '(') (char ')') arithmeticExpressionParser) <|> valueParser
 innerExpressionParser = (try arithmeticExpressionParser) <|> valueParser
 
 valueParser = identifierParser
@@ -199,14 +199,17 @@ colourParser = do
 unitNumberParser = do
     sign <- liftM (fromMaybe '+') $ optionMaybe $ oneOf "+-"
     let sign' = if sign == '+' then 1 else -1
-    pre <- many digit
-    let pre' = fromIntegral $ foldr (\a d -> 10 * a + d) 0 $ map decVal pre
-    post <- liftM (fromMaybe []) $ optionMaybe $ (char '.' >> many digit)
-    let post' = foldr (\a d -> (a + d) / 10) 0 $ map (fromIntegral . decVal) post
+
+    pre <- many1 digit
+    let pre' = fromIntegral $ foldl (\a d -> 10 * a + d) 0 $ map decVal pre
+
+    post <- liftM (fromMaybe []) $ optionMaybe $ (char '.' >> many1 digit)
+    let post' = foldr (\d a -> (a + d) / 10) 0 $ map (fromIntegral . decVal) post
+
     unit <- unitParser
     return $ Number unit $ (*) sign' $ pre' + post'
     where
-    decVal = (-) (ord '0') . ord
+    decVal = flip (-) (ord '0') . ord
 
 unitParser = (choice $ map (\(t, u) -> try (string t) >> return u) units) <?> "unit"
     where
