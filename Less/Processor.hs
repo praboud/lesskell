@@ -9,59 +9,59 @@ import Data.Maybe (fromMaybe, fromJust, isJust)
 import Control.Monad ((>=>), liftM, foldM)
 import Control.Monad.Trans.Either
 
-import System.FilePath (takeExtension, addExtension)
+import System.FilePath (takeExtension, addExtension, replaceFileName)
 
 ---------------------
 -- Main Processing --
 ---------------------
-process :: [Statement] -> IOProcessed [CSS]
-process xs = do
+process :: FilePath -> [Statement] -> IOProcessed [CSS]
+process path xs = do
     (m', v') <- hoistEither $ bindMixVar s m v
-    evalScope [] (Scope [Dummy] [] i p s m' v')
+    evalScope path [] (Scope [Dummy] [] i p s m' v')
     where
     (s, [], i, p, m, v) = filterStatements xs
+
+---------------------
+-- Main Processors --
+---------------------
+
+evalScope :: FilePath -> [Include] -> Scope -> IOProcessed [CSS]
+evalScope path alreadySeen scope@(Scope sel _ _ _ _ _ _) = do
+    (rules, css) <- eval path alreadySeen scope
+    return $ (CSS sel rules):css
+
+evalScopes :: FilePath -> [Include] -> Selector -> [Mixin] -> [Variable] -> [Scope] -> IOProcessed [CSS]
+evalScopes path alreadySeen sel m v = mapM (evalScope path alreadySeen . prep) >=> return . concat
+    where prep = (contextualizeSel sel) . (contextualizeEnv m v)
+
+evalMul :: FilePath -> [Include] -> [Scope] -> IOProcessed ([CSSRule], [CSS])
+evalMul path alreadySeen scopes = do
+    (rules, css) <- mapM (eval path alreadySeen) scopes >>= return . unzip
+    return (concat rules, concat css)
+
+eval :: FilePath -> [Include] -> Scope -> IOProcessed ([CSSRule], [CSS])
+eval path alreadySeen (Scope sel r i p sub m v) = do
+    (ps, pr, pi, pm, pv) <- evalImports path p
+    -- evaluate variables in their own scope
+    (m', v') <- hoistEither $ bindMixVar sub (inherit pm m) (inherit pv v)
+    -- evaluate all of our subscopes and rules
+    ourRules <- hoistEither $ mapM (evalRule v') (inherit pr r)
+    ourCSS <- evalScopes path alreadySeen sel m' v' (sub ++ ps)
+    -- include all other mixins, but ignore includes we have already seen
+    (includeRules, includeCSS) <-
+        hoistEither (mapM (lookupMixin sel m' v') (i ++ pi))
+        >>= evalMul path alreadySeen
+    right (inherit includeRules ourRules, ourCSS ++ includeCSS)
+
+----------------------
+-- Helper Functions --
+----------------------
 
 extractMixins :: [Scope] -> [Mixin]
 extractMixins = map (\s -> Mixin [] s Nothing) . filter scopeIsSimpleClass
     where
     scopeIsSimpleClass (Scope [Terminus [ClassSelector _]] _ _ _ _ _ _) = True
     scopeIsSimpleClass _ = False
-
----------------------
--- Main Processors --
----------------------
-
-evalScope :: [Include] -> Scope -> IOProcessed [CSS]
-evalScope alreadySeen scope@(Scope sel _ _ _ _ _ _) = do
-    (rules, css) <- eval alreadySeen scope
-    return $ (CSS sel rules):css
-
-evalScopes :: [Include] -> Selector -> [Mixin] -> [Variable] -> [Scope] -> IOProcessed [CSS]
-evalScopes alreadySeen sel m v = mapM (evalScope alreadySeen . prep) >=> return . concat
-    where prep = (contextualizeSel sel) . (contextualizeEnv m v)
-
-evalMul :: [Include] -> [Scope] -> IOProcessed ([CSSRule], [CSS])
-evalMul alreadySeen scopes = do
-    (rules, css) <- mapM (eval alreadySeen) scopes >>= return . unzip
-    return (concat rules, concat css)
-
-eval :: [Include] -> Scope -> IOProcessed ([CSSRule], [CSS])
-eval alreadySeen (Scope sel r i p sub m v) = do
-    (ps, pr, pi, pm, pv) <- evalImports p
-    -- evaluate variables in their own scope
-    (m', v') <- hoistEither $ bindMixVar sub (inherit pm m) (inherit pv v)
-    -- evaluate all of our subscopes and rules
-    ourRules <- hoistEither $ mapM (evalRule v') (inherit pr r)
-    ourCSS <- evalScopes alreadySeen sel m' v' (sub ++ ps)
-    -- include all other mixins, but ignore includes we have already seen
-    (includeRules, includeCSS) <-
-        hoistEither (mapM (lookupMixin sel m' v') (i ++ pi))
-        >>= evalMul alreadySeen
-    right (inherit includeRules ourRules, ourCSS ++ includeCSS)
-
-----------------------
--- Helper Functions --
-----------------------
 
 lookupMixin :: Selector -> [Mixin] -> [Variable] -> Include -> Processed Scope
 lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i p subs m v) guards):_) vs (Include name2 gives)
@@ -121,17 +121,18 @@ processParams (x:xs) (y:ys) = processParams xs ys >>= return . ((Variable name y
 
 -- recursively process all imports
 -- don't import things twice
-evalImports :: [Import] -> IOProcessed ([Scope], [Rule], [Include], [Mixin], [Variable])
-evalImports = liftM snd . foldM evalImport_h ([], ([], [], [], [], [])) . map assumeLessExtension
+evalImports :: FilePath -> [Import] -> IOProcessed ([Scope], [Rule], [Include], [Mixin], [Variable])
+evalImports path = liftM snd . foldM (evalImport_h path) ([], ([], [], [], [], [])) . map assumeLessExtension
     where
     assumeLessExtension path = case takeExtension path of
         "" -> addExtension path "less"
         _ -> path
-    evalImport_h acc@(alreadySeen, (s1, r1, i1, m1, v1)) path
+    evalImport_h relPath acc@(alreadySeen, (s1, r1, i1, m1, v1)) path
         | path `elem` alreadySeen = return acc
         | otherwise = do
-            (s2, r2, i2, p2, m2, v2) <- liftM filterStatements $ EitherT $ liftM parseLess $ readFile path
+            (s2, r2, i2, p2, m2, v2) <- liftM filterStatements $ EitherT $ liftM parseLess $ readFile path'
             let combined = (s1 ++ s2, r1 ++ r2, i1 ++ i2, m1 ++ m2, v1 ++ v2)
-            foldM evalImport_h (alreadySeen', combined) p2
+            foldM (evalImport_h path') (alreadySeen', combined) p2
         where
         alreadySeen' = path : alreadySeen
+        path' = replaceFileName relPath path

@@ -1,10 +1,12 @@
 import Less.Utils (compile, report)
 import System.IO (stderr, hPutStrLn)
+import System.Environment (getArgs)
+import Control.Monad (liftM)
 import Control.Monad.Trans.Either
 
 main = do
-    less <- getContents
+    path <- liftM head $ getArgs
     eitherT
-        (hPutStrLn stderr . report less)
+        (\e -> do { less <- readFile path; hPutStrLn stderr $ report less e })
         (putStr . concat . map show)
-        (compile less)
+        (compile path)

@@ -6,8 +6,8 @@ import Less.Processor (process)
 import Text.ParserCombinators.Parsec (sourceLine, sourceColumn)
 import Text.Parsec.Error (errorMessages, errorPos,
     Message(Message, SysUnExpect, UnExpect, Expect ))
-import Control.Monad ((>=>))
-import Control.Monad.Trans.Either (hoistEither)
+import Control.Monad (liftM)
+import Control.Monad.Trans.Either (hoistEither, EitherT(EitherT))
 
 
 report :: String -> ProcessError -> String
@@ -32,5 +32,5 @@ report raw err = case err of
         fileLines = lines raw
 
 
-compile :: String -> IOProcessed [CSS]
-compile = (hoistEither . parseLess) >=> process
+compile :: FilePath -> IOProcessed [CSS]
+compile path = (EitherT $ liftM Right $ readFile path) >>= (hoistEither . parseLess) >>= process path

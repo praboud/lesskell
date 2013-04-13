@@ -1,10 +1,10 @@
 import Less.Utils(compile)
 import Less.Types
 import Data.Maybe (isJust, fromJust)
-import Control.Monad (foldM, (>=>), liftM)
+import Control.Monad (foldM)
 import Control.Monad.Trans.Either
 import System.FilePath (takeExtension, replaceExtension, joinPath)
-import System.Directory (getDirectoryContents, canonicalizePath)
+import System.Directory (getDirectoryContents)
 import Text.Printf (printf)
 
 -- responsible for checking if two css sets are equivalent
@@ -25,17 +25,12 @@ ruleInSet r1 (r2:rs)
     | r1 == r2 = return rs
     | otherwise = ruleInSet r1 rs >>= return . (r2:)
 
-readLess :: FilePath -> IOProcessed String
-readLess = EitherT . liftM Right . readFile
-readAndCompile :: FilePath -> IOProcessed [CSS]
-readAndCompile = readLess >=> compile
-
 -- responsible for comparing less and css to check for equivalence
 runTestCase :: FilePath -> FilePath -> IO Bool
 runTestCase less css = do
     let compiled = do
-        less' <- readAndCompile less
-        css' <- readAndCompile css
+        less' <- compile less
+        css' <- compile css
         return (less', css')
     eitherT
         (return . const False)
