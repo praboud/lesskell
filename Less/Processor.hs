@@ -43,7 +43,7 @@ eval :: FilePath -> [Include] -> Scope -> IOProcessed ([CSSRule], [CSS])
 eval path alreadySeen (Scope sel r i p sub m v) = do
     (ps, pr, pi, pm, pv) <- evalImports path p
     -- evaluate variables in their own scope
-    (m', v') <- hoistEither $ bindMixVar sub (inherit pm m) (inherit pv v)
+    (m', v') <- hoistEither $ bindMixVar (sub ++ ps) (inherit pm m) (inherit pv v)
     -- evaluate all of our subscopes and rules
     ourRules <- hoistEither $ mapM (evalRule v') (inherit pr r)
     ourCSS <- evalScopes path alreadySeen sel m' v' (sub ++ ps)
