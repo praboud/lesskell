@@ -50,7 +50,8 @@ identifier = T.identifier lessLexer
 colon = T.colon lessLexer
 comma = T.comma lessLexer
 braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
-parens = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
+parensOuterSpace = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
+parensInnerSpace = between (char '(' >> whiteSpace) (whiteSpace >> char ')')
 semiSep = flip sepBy (inWhiteSpace $ char ';')
 
 commaSep = flip sepBy1 $ T.comma lessLexer
@@ -118,7 +119,7 @@ selParser = sepBy1 selCombParser comma
     simpleSelParser = (char '#' >> sel >>= return . IdSelector)
                       <|> (char '.' >> sel >>= return . ClassSelector)
                       <|> (char '[' >> manyTill anyChar (char ']') >>= return . AttributeSelector)
-                      <|> (try (string ":not") >> parens simpleSelParser >>= return . NotSelector)
+                      <|> (try (string ":not") >> parensOuterSpace simpleSelParser >>= return . NotSelector)
                       <|> (char ':' >> sel >>= return . PseudoClassSelector)
                       <|> (char '*' >> return UniversalSelector)
                       <|> (sel >>= return . TypeSelector)
@@ -127,7 +128,7 @@ selParser = sepBy1 selCombParser comma
 
 simpleSelectorName = many1 (alphaNum <|> oneOf "-_")
 
-paramParser = parens $ semiSep singleParam
+paramParser = parensOuterSpace $ semiSep singleParam
     where
         singleParam = do
             id <- identifier
@@ -137,12 +138,12 @@ paramParser = parens $ semiSep singleParam
                 Nothing -> Param id
                 Just val -> DefaultParam id val
 
---guardParser = parens $ boolExpressionParser
+--guardParser = parensOuterSpace $ boolExpressionParser
 
 includeParser = do
     char '.'
     name <- simpleSelectorName
-    params <- fmap (fromMaybe []) $ optionMaybe $ parens $ commaSep $ mulExpressionParser
+    params <- fmap (fromMaybe []) $ optionMaybe $ parensOuterSpace $ commaSep $ mulExpressionParser
     statementEnd
     return $ Include name params
 
@@ -178,7 +179,7 @@ statementEnd = whiteSpace >> ((lookAhead (char '}') >> return ()) <|> (char ';' 
 
 mulExpressionParser = outerExpressionParser `sepBy1` whiteSpace1
 
-outerExpressionParser = (between (char '(') (char ')') arithmeticExpressionParser) <|> valueParser
+outerExpressionParser = (parensInnerSpace arithmeticExpressionParser) <|> valueParser
 innerExpressionParser = (try arithmeticExpressionParser) <|> valueParser
 
 valueParser = identifierParser
@@ -238,7 +239,7 @@ unitParser = (choice $ map (\(t, u) -> try (string t) >> return u) units) <?> "u
 
 appParser = do
     name <- many lower
-    args <- parens $ (innerExpressionParser `sepBy` comma)
+    args <- parensInnerSpace $ (innerExpressionParser `sepBy` comma)
     return $ FuncApp name args
 
 quotedString = do
