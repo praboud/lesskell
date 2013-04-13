@@ -9,6 +9,9 @@ addSelectorContext psel csel = concat $ map (\x -> fromMaybe (withoutParentRef x
     withParentRef = subParentRefComb psel
     withoutParentRef c = map (\p -> appendCombToComb p ' ' c) psel
 
+-- return nothing if no parent reference
+-- return selector group with parent references replaced if there is
+-- so .foo, .bar { &.baz {} } -> .foo.baz, .bar.baz {}
 subParentRefComb :: Selector -> SelectorCombinator -> Maybe Selector
 subParentRefComb psel (Terminus seq) = subParentRef psel seq
 subParentRefComb psel (Combinator t seq comb) = case this of
@@ -17,13 +20,13 @@ subParentRefComb psel (Combinator t seq comb) = case this of
     where
     this = subParentRef psel seq
     next = subParentRefComb psel comb
+subParentRefComb _ Dummy = undefined
 
 appendCombToComb Dummy ' ' comb = comb
---appendCombToComb comb ' ' Dummy = comb
+appendCombToComb Dummy _ _ = undefined
 appendCombToComb (Terminus seq) t comb = Combinator t seq comb
 appendCombToComb (Combinator t1 seq comb1) t2 comb2 = Combinator t1 seq $ appendCombToComb comb1 t2 comb2
 -- FIXME: I should have a ProcessError cascade up
-appendCombToComb _ _ _ = undefined
 
 subParentRef :: Selector -> SimpleSelectorSeq -> Maybe Selector
 subParentRef _ [] = Nothing
@@ -34,10 +37,12 @@ subParentRef psel (c:cs) = case c of
 prependSeqToComb :: SelectorCombinator -> SimpleSelector -> SelectorCombinator
 prependSeqToComb (Terminus xs) x = Terminus (x:xs)
 prependSeqToComb (Combinator t xs c) x = Combinator t (x:xs) c
+prependSeqToComb Dummy _ = undefined
 
 appendSeqToComb :: SelectorCombinator -> SimpleSelectorSeq -> SelectorCombinator
 appendSeqToComb (Combinator t xs c) ys = Combinator t xs $ appendSeqToComb c ys
 appendSeqToComb (Terminus xs) ys = Terminus (xs ++ ys)
+appendSeqToComb Dummy _ = undefined
 
 cross :: [x] -> [y] -> [(x, y)]
 cross xs ys = concat [[(x, y) | y <- ys] | x <- xs]

@@ -1,0 +1,19 @@
+.foo {
+display: inline;
+}
+.bar {
+display: inline;
+}
+.top {
+color: grey;
+}
+.top div.nested {
+display: inline;
+}
+.bottom {
+color: red;
+height: 100%;
+}
+.bottom div.nested {
+display: inline;
+}
