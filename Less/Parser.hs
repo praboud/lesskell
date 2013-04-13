@@ -5,7 +5,7 @@ import qualified Text.ParserCombinators.Parsec.Token as T
 import Data.Char (isSpace, ord)
 import Data.Maybe (fromMaybe)
 import Data.Bits ((.|.), shiftL)
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), liftM)
 
 -- some useful helpers --
 
@@ -49,8 +49,6 @@ comma = T.comma lessLexer
 braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
 parens = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
 semiSep = flip sepBy (inWhiteSpace $ char ';')
-float = T.float lessLexer
-integer = T.integer lessLexer
 
 commaSep = flip sepBy1 $ T.comma lessLexer
 
@@ -199,9 +197,16 @@ colourParser = do
         nine = ord '9'
 
 unitNumberParser = do
-    number <- try float <|> (integer >>= return . fromIntegral)
+    sign <- liftM (fromMaybe '+') $ optionMaybe $ oneOf "+-"
+    let sign' = if sign == '+' then 1 else -1
+    pre <- many digit
+    let pre' = fromIntegral $ foldr (\a d -> 10 * a + d) 0 $ map decVal pre
+    post <- liftM (fromMaybe []) $ optionMaybe $ (char '.' >> many digit)
+    let post' = foldr (\a d -> (a + d) / 10) 0 $ map (fromIntegral . decVal) post
     unit <- unitParser
-    return $ Number unit number
+    return $ Number unit $ (*) sign' $ pre' + post'
+    where
+    decVal = (-) (ord '0') . ord
 
 unitParser = (choice $ map (\(t, u) -> try (string t) >> return u) units) <?> "unit"
     where
