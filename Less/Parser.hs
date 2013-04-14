@@ -3,7 +3,7 @@ import Less.Types
 import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as T
 import Data.Char (isSpace, ord)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, maybe)
 import Data.Bits ((.|.), shiftL)
 import Control.Monad ((>=>), liftM)
 
@@ -46,7 +46,6 @@ simpleSpace = skipMany1 (satisfy isSpace)
 whiteSpace = skipMany (simpleSpace <|> comment)
 whiteSpace1 = ((skipMany1 (satisfy isSpace) >> whiteSpace) <|> (comment >> whiteSpace1))
 inWhiteSpace = between whiteSpace whiteSpace
-identifier = T.identifier lessLexer
 colon = T.colon lessLexer
 comma = T.comma lessLexer
 braces = between (inWhiteSpace $ char '{') (inWhiteSpace $ char '}')
@@ -131,7 +130,7 @@ simpleSelectorName = many1 (alphaNum <|> oneOf "-_")
 paramParser = parensOuterSpace $ semiSep singleParam
     where
         singleParam = do
-            id <- identifier
+            id <- varIdentifier
             whiteSpace
             deflt <- optionMaybe (char ':' >> whiteSpace >> mulExpressionParser)
             return $ case deflt of
@@ -156,14 +155,23 @@ importParser = do
     return path
 
 ruleParser = do
-    prop <- many1 $ lower <|> char '-'
+    prop <- identifier
     colon
     val <- mulExpressionParser
     statementEnd
     return $ Rule prop val
 
+identifier = do
+    prefix <- optionMaybe $ char '-'
+    start <- lower <|> char '_'
+    rest <- many (lower <|> digit <|> oneOf "-_")
+    let s = start : rest
+    return $ maybe s (:s) prefix
+
+varIdentifier = char '@' >> identifier
+
 variableParser = do
-    id <- identifier
+    id <- varIdentifier
     colon
     val <- mulExpressionParser
     statementEnd
@@ -182,14 +190,13 @@ mulExpressionParser = outerExpressionParser `sepBy1` whiteSpace1
 outerExpressionParser = (parensInnerSpace arithmeticExpressionParser) <|> valueParser
 innerExpressionParser = (try arithmeticExpressionParser) <|> valueParser
 
-valueParser = identifierParser
+valueParser = fmap (Identifier 1) varIdentifier
               <|> numberParser
               <|> try appParser
               <|> (fmap Literal quotedString)
-              <|> (fmap Literal $ many1 lower)
+              <|> (fmap Literal $ manyTill anyChar $ lookAhead (whiteSpace1 <|> (oneOf ";}()" >> return ())))
 
 numberParser = colourParser <|> unitNumberParser
-identifierParser = fmap (Identifier 1) identifier
 
 colourParser = do
     char '#'
