@@ -12,3 +12,16 @@ Setup
 -----
 
 Download and compile from source.
+
+Missing Features
+----------------
+
+[ ] Variable interpolation in strings
+[ ] Variable interpolation in selectors
+[ ] Boolean expressions
+[ ] Guards
+[ ] Pattern matching for mixins
+[ ] Mixin selection by compound selector
+[ ] Includes can match multiple mixins
+[x] Imports
+[ ] Add all native functions
