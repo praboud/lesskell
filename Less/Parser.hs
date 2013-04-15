@@ -125,14 +125,15 @@ selParser = sepBy1 selCombParser comma
 
 simpleSelectorName = many1 (alphaNum <|> oneOf "-_")
 
-paramParser = parensOuterSpace $ semiSep singleParam
+paramParser = parensOuterSpace $ semiSep (singleParam <|> patternParam)
     where
-        singleParam = do
-            id <- varIdentifier
-            deflt <- optionMaybe (colon >> mulExpressionParser)
-            return $ case deflt of
-                Nothing -> Param id
-                Just val -> DefaultParam id val
+    singleParam = do
+        id <- varIdentifier
+        deflt <- optionMaybe (colon >> mulExpressionParser)
+        return $ case deflt of
+            Nothing -> Param id
+            Just val -> DefaultParam id val
+    patternParam = liftM PatternParam mulExpressionParser
 
 --guardParser = parensOuterSpace $ boolExpressionParser
 

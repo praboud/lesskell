@@ -20,7 +20,7 @@ Missing Features
 [ ] Variable interpolation in selectors
 [ ] Boolean expressions
 [ ] Guards
-[ ] Pattern matching for mixins
+[x] Pattern matching for mixins
 [ ] Mixin selection by compound selector
 [x] Includes can match multiple mixins
 [ ] important! on mixins

@@ -125,6 +125,7 @@ data Variable = Variable Identifier [Expression] deriving Show
 
 data Param = Param Identifier
            | DefaultParam Identifier [Expression]
+           | PatternParam [Expression]
            deriving Show
 
 type Identifier = String

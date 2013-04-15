@@ -1,0 +1,22 @@
+.foo(red) {
+    color: red;
+}
+.bar {
+    .foo(blue);
+}
+.baz {
+    .foo(red);
+}
+
+.foo2(1px; @length) {
+    color: red;
+}
+.foo2(@width; @length) {
+    margin: @width @length;
+}
+.bar2 {
+    .foo2(2px; 2px);
+}
+.baz2 {
+    .foo2(1px; 2px);
+}

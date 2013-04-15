@@ -78,17 +78,17 @@ lookupMixin ms vs (Include isel gives) = case filter nameMatches ms of
     nameMatches :: Mixin -> Bool
     nameMatches = (isel ==) . selector . body
     matchMixin :: Mixin -> Processed (Maybe Scope)
-    matchMixin (Mixin takes (Scope sel rules incl imprt subs smix svar) guards)
-        | parityMatch && guardMatch =
-            return $ Just $ Scope sel rules incl imprt subs smix allVars
-        | otherwise = return Nothing
-        where
-        parityMatch = isJust paramVars
-        guardMatch = fromMaybe True $ guards
+    matchMixin (Mixin takes (Scope sel rules incl imprt subs smix svar) guards) = do
+        paramVars <- processParams vs takes gives
+        let parityMatch = isJust paramVars
+        let guardMatch = fromMaybe True $ guards
                      >>= return . evalBool (inherit vs $ fromJust paramVars)
-        paramVars = processParams takes gives
         -- allVars variables from parent scope, our scope, and given as parameters
-        allVars = inherit vs (inherit svar (fromJust paramVars))
+        let allVars = inherit vs (inherit svar (fromJust paramVars))
+        
+        return $ if parityMatch && guardMatch
+            then Just $ Scope sel rules incl imprt subs smix allVars
+            else Nothing
 
 contextualizeSel psel (Scope csel cr ci cp csub cm cv) =
     (Scope newSel cr ci cp csub cm cv)
@@ -118,16 +118,26 @@ evalVar vs (Variable id exps) = mapM (evalExp vs) exps >>= return . Variable id 
 evalBool :: [Variable] -> BoolExpression -> Bool
 evalBool _ _ = True
 
-processParams :: [Param] -> [[Expression]] -> Maybe [Variable]
+processParams :: [Variable] -> [Param] -> [[Expression]] -> Processed (Maybe [Variable])
 -- match params expected against expressions given
 -- return Nothing if there is no match
 -- return Just [Variable] if there is, where the variables are a list of new
 -- bindings created by the params to expressions map
-processParams [] [] = Just []
-processParams [] _ = Nothing
-processParams ((Param _ ):_) [] = Nothing
-processParams ((DefaultParam v e):xs) [] = processParams xs [] >>= return . ((Variable v e):)
-processParams (x:xs) (y:ys) = processParams xs ys >>= return . ((Variable name y):)
+processParams _ [] [] = return $ Just []
+processParams _ [] _ = return $ Nothing
+processParams _ ((Param _ ):_) [] = return $  Nothing
+processParams vs ((DefaultParam v e):xs) [] = do
+    rst <- processParams vs xs [] 
+    return (rst >>= return . ((Variable v e):))
+processParams vs ((PatternParam e):xs) (y:ys) = do
+    e' <- evalExpMul vs e
+    y' <- evalExpMul vs y
+    if e' == y'
+        then processParams vs xs ys
+        else return Nothing
+processParams vs (x:xs) (y:ys) = do
+    rst <- processParams vs xs ys
+    return (rst >>= Just . ((Variable name y):))
     where
     name = case x of
         Param n -> n

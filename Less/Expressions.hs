@@ -1,11 +1,15 @@
-module Less.Expressions (evalExp) where
+module Less.Expressions (evalExp, evalExpMul) where
 
 import Less.Types
 import Data.Maybe (fromJust)
+import Control.Monad (liftM)
 
 -- function deps
 import Less.Parser(unitParser, colourParser)
 import Text.ParserCombinators.Parsec(parse)
+
+evalExpMul :: [Variable] -> [Expression] -> Processed [Expression]
+evalExpMul vs = liftM concat . mapM (evalExp vs)
 
 evalExp :: [Variable] -> Expression -> Either ProcessError [Expression]
 evalExp _ x@(Literal _) = return [x]
