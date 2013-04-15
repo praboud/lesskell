@@ -1,0 +1,12 @@
+.foo {
+    display: inline-block;
+    width: 4px;
+}
+.foo div {
+    display: inline-block;
+    width: 4px;
+}
+.foo a {
+    display: inline-block;
+    width: 10px;
+}

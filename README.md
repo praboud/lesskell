@@ -22,6 +22,10 @@ Missing Features
 [ ] Guards
 [ ] Pattern matching for mixins
 [ ] Mixin selection by compound selector
-[ ] Includes can match multiple mixins
+[x] Includes can match multiple mixins
+[ ] important! on mixins
+[ ] @arguments parameter inside of mixins
+[ ] Mixins taking variable number of parameters
 [x] Imports
 [ ] Add all native functions
+[ ] Prohibit overlapping definitions of variables and mixins

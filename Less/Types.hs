@@ -33,7 +33,7 @@ data Scope = Scope
     }
     deriving Show
 
-data Include = Include String [[Expression]] deriving Show
+data Include = Include Selector [[Expression]] deriving Show
 
 type Import = FilePath
 

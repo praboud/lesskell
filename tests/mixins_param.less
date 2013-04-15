@@ -1,0 +1,10 @@
+.foo {
+    .bar();
+
+    .bar (@width: 4px) {
+        display: inline-block;
+        width: @width;
+    }
+    div { .bar; }
+    a { .bar(10px); }
+}

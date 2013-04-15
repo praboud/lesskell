@@ -5,7 +5,7 @@ import Less.Selectors (addSelectorContext)
 import Less.Expressions
 import Less.Parser (parseLess)
 
-import Data.Maybe (fromMaybe, fromJust, isJust)
+import Data.Maybe (fromMaybe, fromJust, isJust, mapMaybe)
 import Control.Monad ((>=>), liftM, foldM)
 import Control.Monad.Trans.Either
 
@@ -49,7 +49,8 @@ eval path alreadySeen (Scope sel r i p sub m v) = do
     ourCSS <- evalScopes path alreadySeen sel m' v' (sub ++ ps)
     -- include all other mixins, but ignore includes we have already seen
     (includeRules, includeCSS) <-
-        hoistEither (mapM (lookupMixin sel m' v') (i ++ pi))
+        (hoistEither $ concatM $ map (lookupMixin m' v') (i ++ pi))
+        >>= return . map (\(Scope _ r i p s m v) -> (Scope sel r i p s m v))
         >>= evalMul path alreadySeen
     right (inherit includeRules ourRules, ourCSS ++ includeCSS)
 
@@ -63,18 +64,31 @@ extractMixins = map (\s -> Mixin [] s Nothing) . filter scopeIsSimpleClass
     scopeIsSimpleClass (Scope [Terminus [ClassSelector _]] _ _ _ _ _ _) = True
     scopeIsSimpleClass _ = False
 
-lookupMixin :: Selector -> [Mixin] -> [Variable] -> Include -> Processed Scope
-lookupMixin sel ((Mixin takes (Scope [Terminus [ClassSelector name1]] r i p subs m v) guards):_) vs (Include name2 gives)
-    | nameMatch && parityMatch && guardMatch = return $ Scope sel r i p subs m allVars
+-- Given an include statement looking for a given mixin, tries to match for
+-- that mixin. Matches by name, arity, pattern-matching on args, and guards
+-- If it cannot find any matches by name, throws an error.
+-- If it cannot find any matches for any other reason, doesn't care
+-- Returns a list of matching scopes, which have had the variable of the parent
+-- scope, and variables from the parameters baked in.
+lookupMixin :: [Mixin] -> [Variable] -> Include -> Processed [Scope]
+lookupMixin ms vs (Include isel gives) = case filter nameMatches ms of
+    [] -> Left $ ProcessError ("Could not match include " ++ show (isel))
+    ms' -> mapM matchMixin ms' >>= return . mapMaybe id
     where
-    nameMatch = name1 == name2
-    parityMatch = isJust paramVars
-    guardMatch = fromMaybe True $ guards >>= return . evalBool (inherit vs $ fromJust paramVars)
-    paramVars = processParams takes gives
-    -- allVars variables from parent scope, our scope, and given as parameters
-    allVars = inherit vs (inherit v (fromJust paramVars))
-lookupMixin sel (_:ms) vs include = lookupMixin sel ms vs include
-lookupMixin _ _ _ (Include name _) = Left (ProcessError ("Could not match include " ++ name ))
+    nameMatches :: Mixin -> Bool
+    nameMatches = (isel ==) . selector . body
+    matchMixin :: Mixin -> Processed (Maybe Scope)
+    matchMixin (Mixin takes (Scope sel rules incl imprt subs smix svar) guards)
+        | parityMatch && guardMatch =
+            return $ Just $ Scope sel rules incl imprt subs smix allVars
+        | otherwise = return Nothing
+        where
+        parityMatch = isJust paramVars
+        guardMatch = fromMaybe True $ guards
+                     >>= return . evalBool (inherit vs $ fromJust paramVars)
+        paramVars = processParams takes gives
+        -- allVars variables from parent scope, our scope, and given as parameters
+        allVars = inherit vs (inherit svar (fromJust paramVars))
 
 contextualizeSel psel (Scope csel cr ci cp csub cm cv) =
     (Scope newSel cr ci cp csub cm cv)
@@ -136,3 +150,6 @@ evalImports path = liftM snd . foldM (evalImport_h path) ([], ([], [], [], [], [
         where
         alreadySeen' = path : alreadySeen
         path' = replaceFileName relPath path
+
+concatM :: Monad m => [m [a]] -> m [a]
+concatM = liftM concat . sequence

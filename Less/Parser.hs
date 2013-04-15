@@ -53,8 +53,6 @@ parensOuterSpace = between (inWhiteSpace $ char '(') (inWhiteSpace $ char ')')
 parensInnerSpace = between (char '(' >> whiteSpace) (whiteSpace >> char ')')
 semiSep = flip sepBy (inWhiteSpace $ char ';')
 
-commaSep = flip sepBy1 $ T.comma lessLexer
-
 
 ---------------------------------------
 -- all of the actual parsers go here --
@@ -131,8 +129,7 @@ paramParser = parensOuterSpace $ semiSep singleParam
     where
         singleParam = do
             id <- varIdentifier
-            whiteSpace
-            deflt <- optionMaybe (char ':' >> whiteSpace >> mulExpressionParser)
+            deflt <- optionMaybe (colon >> mulExpressionParser)
             return $ case deflt of
                 Nothing -> Param id
                 Just val -> DefaultParam id val
@@ -140,9 +137,8 @@ paramParser = parensOuterSpace $ semiSep singleParam
 --guardParser = parensOuterSpace $ boolExpressionParser
 
 includeParser = do
-    char '.'
-    name <- simpleSelectorName
-    params <- fmap (fromMaybe []) $ optionMaybe $ parensOuterSpace $ commaSep $ mulExpressionParser
+    name <- try selParser
+    params <- liftM (fromMaybe []) $ optionMaybe $ parensOuterSpace $ semiSep $ mulExpressionParser
     statementEnd
     return $ Include name params
 
@@ -194,7 +190,7 @@ valueParser = fmap (Identifier 1) varIdentifier
               <|> numberParser
               <|> try appParser
               <|> (fmap Literal quotedString)
-              <|> (fmap Literal $ manyTill anyChar $ lookAhead (whiteSpace1 <|> (oneOf ";}()" >> return ())))
+              <|> (fmap Literal $ manyTill1 anyChar $ lookAhead (whiteSpace1 <|> (oneOf ";}()" >> return ())))
 
 numberParser = colourParser <|> unitNumberParser
 
@@ -268,3 +264,14 @@ arithmeticExpressionParser = arith_h operators
     arith_h (ops:rest) = (arith_h rest) `chainl1` (try $ inWhiteSpace $ choice (map opParser ops))
     term = outerExpressionParser
     opParser = char >=> return . BinOp
+
+
+-------------
+-- helpers --
+-------------
+
+-- note: this only works if end consumes no input (ie: is a lookahead)
+manyTill1 :: Parser a -> Parser b -> Parser [a]
+manyTill1 p end = do
+    xs <- manyTill p end
+    if null xs then pzero else return xs
