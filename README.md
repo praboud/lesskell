@@ -16,16 +16,16 @@ Download and compile from source.
 Missing Features
 ----------------
 
-[ ] Variable interpolation in strings
-[ ] Variable interpolation in selectors
-[ ] Boolean expressions
-[ ] Guards
-[x] Pattern matching for mixins
-[ ] Mixin selection by compound selector
-[x] Includes can match multiple mixins
-[ ] important! on mixins
-[ ] @arguments parameter inside of mixins
-[ ] Mixins taking variable number of parameters
-[x] Imports
-[ ] Add all native functions
-[ ] Prohibit overlapping definitions of variables and mixins
+- [ ] Variable interpolation in strings
+- [ ] Variable interpolation in selectors
+- [ ] Boolean expressions
+- [ ] Guards
+- [x] Pattern matching for mixins
+- [ ] Mixin selection by compound selector
+- [x] Includes can match multiple mixins
+- [ ] important! on mixins
+- [ ] @arguments parameter inside of mixins
+- [ ] Mixins taking variable number of parameters
+- [x] Imports
+- [ ] Add all native functions
+- [ ] Prohibit overlapping definitions of variables and mixins
